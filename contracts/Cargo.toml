@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "src/pallets/kyc",
+    "src/pallets/remittance",
+    "src/pallets/rate_lock",
+    "src/pallets/fiat_bridge",
+    "src/runtime",
+]
+
+[workspace.dependencies]
+frame-support = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+frame-system = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+pallet-assets = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+sp-runtime = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+sp-std = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+sp-io = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+sp-core = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+xcm = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+xcm-builder = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+pallet-xcm = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+cumulus-pallet-parachain-system = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
+scale-info = { version = "2.11", default-features = false, features = ["derive"] }
+parity-scale-codec = { version = "3.6", default-features = false, features = ["derive"] }
+log = { version = "0.4", default-features = false }

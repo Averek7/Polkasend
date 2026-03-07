@@ -1,0 +1,20 @@
+[package]
+name = "pallet-rate-lock"
+version = "0.1.0"
+edition = "2021"
+description = "FX rate oracle and lock pallet for PolkaSend"
+license = "Apache-2.0"
+
+[dependencies]
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+sp-io = { workspace = true }
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
+log = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["frame-support/std","frame-system/std","sp-runtime/std","sp-std/std","sp-io/std","scale-info/std","parity-scale-codec/std"]
