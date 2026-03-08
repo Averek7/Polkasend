@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Navbar } from "../../components/layout/Navbar";
 import { useRemittanceStore } from "../../lib/polkadot/remittanceStore";
-import { useWalletStore } from "../../lib/polkadot/walletStore";
 import { SendForm } from "../../components/remittance/SendForm";
 import { FeeBreakdown } from "../../components/remittance/FeeBreakdown";
 import { XcmRoute } from "../../components/remittance/XcmRoute";

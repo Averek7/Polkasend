@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import axios from "axios";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 export type DeliveryMode = "upi" | "imps" | "iinr" | "aadhaar";
 
@@ -69,7 +69,7 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
 
   fetchFxRate: async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/rates/usdinr`);
+      const { data } = await axios.get(`${API_BASE}/rates`);
       const rate = data.rate ?? DEMO_RATE;
       const amt = parseFloat(get().sendAmount) || 0;
       set({ fxRate: rate, receiveAmountInr: amt * (1 - FEE_PCT) * rate });
@@ -83,7 +83,7 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
     set({ isSubmitting: true, error: null });
 
     try {
-      const { data } = await axios.post(`${API_BASE}/remittance/initiate`, {
+      const { data } = await axios.post(`${API_BASE}/remittance`, {
         senderAddress,
         recipientId,
         amount: parseFloat(sendAmount),
@@ -108,10 +108,12 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
 
   pollOrderStatus: async (orderId) => {
     const poll = async () => {
+      if (get().orderId !== orderId) return;
+
       try {
-        const { data } = await axios.get(
-          `${API_BASE}/remittance/order/${orderId}`,
-        );
+        const { data } = await axios.get(`${API_BASE}/remittance`, {
+          params: { orderId },
+        });
         set({ orderStatus: data.status, utrNumber: data.utrNumber ?? null });
         if (data.status !== "Completed" && data.status !== "Failed") {
           setTimeout(poll, 3000);

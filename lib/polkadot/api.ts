@@ -63,14 +63,14 @@ export async function queryKycRecord(address: string): Promise<KycRecord | null>
   const api = await getPolkadotApi();
   const result = await api.query['kyc']['kycRecords'](address);
   if (result.isEmpty) return null;
-  return result.toJSON() as KycRecord;
+  return result.toJSON() as unknown as KycRecord;
 }
 
 export async function queryOrder(orderId: string): Promise<RemittanceOrder | null> {
   const api = await getPolkadotApi();
   const result = await api.query['remittance']['orders'](orderId);
   if (result.isEmpty) return null;
-  return result.toJSON() as RemittanceOrder;
+  return result.toJSON() as unknown as RemittanceOrder;
 }
 
 export async function queryFxRate(): Promise<number> {

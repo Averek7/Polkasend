@@ -4,15 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { PolkaSendLogo } from "@/components/logo/PolkaSendLogo";
+import { PolkaSendLogo } from "../logo/PolkaSendLogo";
 import { useWalletStore } from "../../lib/polkadot/walletStore";
 import { Menu, X } from "lucide-react";
 
-const NAV_LINKS = [
+type NavHref = "/" | "/send" | "/track" | "/architecture" | "/dashboard";
+
+const NAV_LINKS: Array<{ href: NavHref; label: string }> = [
   { href: "/", label: "Home" },
   { href: "/send", label: "Send Money" },
   { href: "/track", label: "Track" },
-  { href: "/architecture", label: "Architecture" },
   { href: "/dashboard", label: "Dashboard" },
 ];
 
@@ -24,6 +25,11 @@ export function Navbar() {
   const shortAddr = address
     ? `${address.slice(0, 6)}…${address.slice(-4)}`
     : null;
+
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname.startsWith(href);
+  };
 
   return (
     <>
@@ -42,10 +48,11 @@ export function Navbar() {
               <PolkaSendLogo size={36} animate />
             </Link>
 
-            {/* Desktop nav */}
+            {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1">
               {NAV_LINKS.map(({ href, label }) => {
-                const active = pathname === href;
+                const active = isActive(href);
+
                 return (
                   <Link
                     key={href}
@@ -67,8 +74,9 @@ export function Navbar() {
               })}
             </nav>
 
+            {/* Right Side */}
             <div className="flex items-center gap-3">
-              {/* Wallet button */}
+              {/* Wallet Button */}
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -86,7 +94,7 @@ export function Navbar() {
                 {isConnecting ? "Connecting…" : (shortAddr ?? "Connect Wallet")}
               </motion.button>
 
-              {/* Mobile menu toggle */}
+              {/* Mobile Menu Button */}
               <button
                 className="md:hidden p-2 text-polka-muted"
                 onClick={() => setOpen(!open)}
@@ -98,7 +106,7 @@ export function Navbar() {
         </div>
       </header>
 
-      {/* Mobile drawer */}
+      {/* Mobile Drawer */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -112,20 +120,25 @@ export function Navbar() {
             }}
           >
             <nav className="flex flex-col p-4 gap-1">
-              {NAV_LINKS.map(({ href, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setOpen(false)}
-                  className={`px-4 py-3 rounded-xl text-sm font-medium ${
-                    pathname === href
-                      ? "bg-polka-pink text-white"
-                      : "text-polka-muted hover:text-polka-text"
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
+              {NAV_LINKS.map(({ href, label }) => {
+                const active = isActive(href);
+
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setOpen(false)}
+                    className={`px-4 py-3 rounded-xl text-sm font-medium ${
+                      active
+                        ? "bg-polka-pink text-white"
+                        : "text-polka-muted hover:text-polka-text"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+
               <button
                 onClick={address ? disconnect : connect}
                 className="mt-2 px-4 py-3 rounded-xl text-sm font-medium border border-polka-border text-polka-muted"
