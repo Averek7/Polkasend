@@ -169,21 +169,6 @@ export default function HomePage() {
                   Send Money Now <ArrowRight size={18} />
                 </motion.button>
               </Link>
-              <Link href="/architecture">
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="flex items-center gap-2 px-8 py-4 rounded-xl font-bold"
-                  style={{
-                    background: "rgba(22,22,30,0.8)",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    color: "#f0f0f8",
-                    fontSize: "1rem",
-                  }}
-                >
-                  View Architecture
-                </motion.button>
-              </Link>
             </motion.div>
           </div>
         </section>

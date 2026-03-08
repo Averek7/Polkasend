@@ -8,7 +8,7 @@ import { PolkaSendLogo } from "../logo/PolkaSendLogo";
 import { useWalletStore } from "../../lib/polkadot/walletStore";
 import { Menu, X } from "lucide-react";
 
-type NavHref = "/" | "/send" | "/track" | "/architecture" | "/dashboard";
+type NavHref = "/" | "/send" | "/track" | "/dashboard";
 
 const NAV_LINKS: Array<{ href: NavHref; label: string }> = [
   { href: "/", label: "Home" },
