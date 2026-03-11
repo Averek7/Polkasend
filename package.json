@@ -7,7 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "backend:dev": "npm --prefix backend run dev",
+    "backend:build": "npm --prefix backend run build",
+    "backend:test": "npm --prefix backend run test",
+    "dev:integrated": "sh -c 'npm --prefix backend run dev & npm run dev'",
+    "build:all": "npm --prefix backend run build && npm run build",
+    "deploy:local": "sh deployment/deploy-parachain.sh"
   },
   "dependencies": {
     "next": "14.2.5",

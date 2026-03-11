@@ -1,0 +1,14 @@
+{
+  "name": "polkasend-deployment",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "setup-chain": "tsx scripts/setup-chain.ts"
+  },
+  "dependencies": {
+    "@polkadot/api": "^10.13.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5"
+  }
+}

@@ -126,9 +126,12 @@ export function updateOrderStatus(
 }
 
 export function confirmSettlement(id: string, utrNumber: string): RemittanceOrder | null {
+  const existing = getOrder(id);
+  if (!existing) return null;
+
   const order = updateOrderStatus(id, 'COMPLETED', {
     type: 'SETTLEMENT_CONFIRMED',
-    message: `INR delivered via ${order?.deliveryMode}. UTR: ${utrNumber}`,
+    message: `INR delivered via ${existing.deliveryMode}. UTR: ${utrNumber}`,
     data: { utrNumber },
   });
   if (order) order.utrNumber = utrNumber;
@@ -152,3 +155,7 @@ export function pruneExpiredOrders(): void {
 }
 
 setInterval(pruneExpiredOrders, 60_000);
+
+export function __resetOrdersForTests(): void {
+  orders.clear();
+}

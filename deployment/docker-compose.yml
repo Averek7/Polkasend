@@ -1,0 +1,53 @@
+services:
+  backend:
+    image: node:20-alpine
+    working_dir: /workspace/backend
+    volumes:
+      - ../backend:/workspace/backend
+    command: sh -c "npm install && npm run dev"
+    environment:
+      - PORT=4000
+      - FRONTEND_URL=http://localhost:3000
+      - POLKASEND_WS=ws://parachain:9944
+    ports:
+      - "4000:4000"
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+    command: sh -c "npm install && NEXT_PUBLIC_API_URL=http://backend:4000/api npm run dev"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000/api
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+  relaychain:
+    image: parity/polkadot:v1.12.0
+    command:
+      - --chain=rococo-local
+      - --alice
+      - --ws-external
+      - --rpc-external
+      - --rpc-methods=Unsafe
+      - --rpc-cors=all
+    ports:
+      - "9945:9944"
+    profiles: ["chain"]
+
+  parachain:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.parachain
+    environment:
+      - POLKASEND_WS=ws://parachain:9944
+      - RELAYCHAIN_WS=ws://relaychain:9944
+      - PARA_ID=3000
+    depends_on:
+      - relaychain
+    ports:
+      - "9944:9944"
+    profiles: ["chain"]

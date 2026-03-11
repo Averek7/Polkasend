@@ -1,0 +1,14 @@
+FROM node:20-alpine
+
+WORKDIR /opt/polkasend
+
+RUN apk add --no-cache bash curl
+
+# This image is intentionally lightweight: it drives chain bootstrap scripts.
+# Replace PARACHAIN_BINARY with your actual compiled node binary for production.
+ENV PARACHAIN_BINARY=/usr/local/bin/polkasend-parachain
+
+COPY deployment/deploy-parachain.sh /usr/local/bin/deploy-parachain.sh
+RUN chmod +x /usr/local/bin/deploy-parachain.sh
+
+ENTRYPOINT ["/usr/local/bin/deploy-parachain.sh"]

@@ -21,6 +21,10 @@
 
 pub use pallet::*;
 
+pub fn is_valid_utr(utr: &[u8]) -> bool {
+    (12..=22).contains(&utr.len()) && utr.iter().all(|b| b.is_ascii_alphanumeric())
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::{
@@ -154,8 +158,7 @@ pub mod pallet {
 
             // Basic UTR format: alphanumeric, 12–22 chars
             ensure!(
-                utr_number.len() >= 12 && utr_number.len() <= 22
-                    && utr_number.iter().all(|b| b.is_ascii_alphanumeric()),
+                crate::is_valid_utr(&utr_number),
                 Error::<T>::InvalidUtrFormat
             );
 
@@ -198,5 +201,17 @@ pub mod pallet {
             Self::deposit_event(Event::OracleDeregistered { account });
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn utr_format_validation_works() {
+        assert!(is_valid_utr(b"HDFC1234567890"));
+        assert!(!is_valid_utr(b"too_short"));
+        assert!(!is_valid_utr(b"HDFC1234-INVALID"));
     }
 }

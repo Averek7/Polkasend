@@ -9,6 +9,19 @@
 
 pub use pallet::*;
 
+pub fn parse_inr_rate_from_json(body: &[u8]) -> Option<f64> {
+    let body_str = core::str::from_utf8(body).ok()?;
+    let inr_pos = body_str.find("\"INR\"")?;
+    let after_inr = &body_str[inr_pos + 5..];
+    let colon_pos = after_inr.find(':')?;
+    let after_colon = after_inr[colon_pos + 1..].trim_start();
+    let end = after_colon
+        .find(|c: char| !c.is_ascii_digit() && c != '.')
+        .unwrap_or(after_colon.len());
+    let rate_str = &after_colon[..end];
+    rate_str.parse::<f64>().ok()
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::{
@@ -226,23 +239,25 @@ pub mod pallet {
         }
 
         fn parse_inr_rate(body: &[u8]) -> Option<f64> {
-            // Minimal JSON parsing without serde in no_std
-            // Look for "INR": or "INR":{
-            let body_str = core::str::from_utf8(body).ok()?;
-            let inr_pos = body_str.find("\"INR\"")?;
-            let after_inr = &body_str[inr_pos + 5..];
-            let colon_pos = after_inr.find(':')?;
-            let after_colon = after_inr[colon_pos + 1..].trim_start();
-            let end = after_colon
-                .find(|c: char| !c.is_ascii_digit() && c != '.')
-                .unwrap_or(after_colon.len());
-            let rate_str = &after_colon[..end];
-            rate_str.parse::<f64>().ok()
+            crate::parse_inr_rate_from_json(body)
         }
 
         /// Public getter for pallet_remittance to use
         pub fn get_current_rate() -> Option<u64> {
             CurrentRate::<T>::get().map(|e| e.rate)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_inr_rate_handles_valid_payload() {
+        let payload = br#"{"rates":{"INR":83.5421}}"#;
+        let rate = parse_inr_rate_from_json(payload).unwrap_or_default();
+        assert!(rate > 80.0);
+        assert!(rate < 90.0);
     }
 }
