@@ -16,6 +16,7 @@
 # Environment variables file
 .env
 .env.*.local
+/backend/.env
 
 # Hardhat compilation (v2) support directory
 /cache

@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model RemittanceOrder {
+  id                 String                 @id
+  sender             String
+  recipient          String
+  assetSymbol        String
+  assetId            Int
+  amountIn           Float
+  amountInMinor      String
+  amountOutInrPaise  BigInt
+  fxRateLocked       Float
+  fxRateLockedScaled Int
+  protocolFeeBps     Int
+  protocolFeePaise   BigInt
+  deliveryMode       String
+  status             String
+  txHash             String?
+  utrNumber          String?
+  createdAt          DateTime
+  expiresAt          DateTime
+  updatedAt          DateTime
+  events             RemittanceOrderEvent[]
+
+  @@index([sender, createdAt(sort: Desc)])
+}
+
+model RemittanceOrderEvent {
+  id        String           @id @default(cuid())
+  orderId   String
+  type      String
+  message   String
+  timestamp DateTime
+  data      Json?
+  order     RemittanceOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, timestamp(sort: Asc)])
+}
+
+model KycRecord {
+  address             String   @id
+  level               String
+  countryCode         String
+  annualLimitUsdCents BigInt
+  ytdSentUsdCents     BigInt
+  approvedAt          DateTime
+  expiresAt           DateTime?
+  aadhaarHashedRef    String?
+  panHashedRef        String?
+}
