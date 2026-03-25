@@ -45,19 +45,42 @@ router.post('/', async (req: Request, res: Response) => {
   return res.status(201).json({ success: true, data: order });
 });
 
-// ─── GET /api/remittance/:id — Get order ─────────────────────────
-router.get('/:id', (req: Request, res: Response) => {
-  const order = getOrder(req.params.id);
+// ─── GET /api/remittance?orderId=... — frontend polling shape ────
+router.get('/', (req: Request, res: Response) => {
+  const orderId = req.query.orderId as string | undefined;
+  if (!orderId) {
+    return res.status(400).json({ success: false, error: 'orderId is required' });
+  }
+  const order = getOrder(orderId);
   if (!order) {
     return res.status(404).json({ success: false, error: 'Order not found' });
   }
-  return res.json({ success: true, data: order });
+  return res.json({
+    orderId: order.id,
+    status: order.status,
+    txHash: order.txHash ?? null,
+    utrNumber: order.utrNumber ?? null,
+    amount: order.amountIn,
+    currency: order.assetSymbol,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    etaSeconds: order.status === 'COMPLETED' ? 0 : 22,
+  });
 });
 
 // ─── GET /api/remittance/sender/:address ─────────────────────────
 router.get('/sender/:address', (req: Request, res: Response) => {
   const orders = listOrdersBySender(req.params.address);
   return res.json({ success: true, data: orders, count: orders.length });
+});
+
+// ─── GET /api/remittance/:id — explicit lookup ───────────────────
+router.get('/:id', (req: Request, res: Response) => {
+  const order = getOrder(req.params.id);
+  if (!order) {
+    return res.status(404).json({ success: false, error: 'Order not found' });
+  }
+  return res.json({ success: true, data: order });
 });
 
 // ─── PATCH /api/remittance/:id/confirm — Oracle confirms settlement ──

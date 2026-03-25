@@ -7,6 +7,17 @@
 
 pub use pallet::*;
 
+pub fn compute_gross_inr_paise(amount_micro: u128, fx_rate_scaled: u64) -> u64 {
+    (amount_micro
+        .saturating_mul(fx_rate_scaled as u128)
+        .saturating_mul(100)
+        / 1_000_000_000_000u128) as u64
+}
+
+pub fn compute_fee_paise(gross_inr_paise: u64, protocol_fee_bps: u64) -> u64 {
+    gross_inr_paise.saturating_mul(protocol_fee_bps) / 10_000
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::{
@@ -200,13 +211,11 @@ pub mod pallet {
 
             // INR paise = (USDC_micro * rate * 100) / 10^12
             // rate is * 10^6, USDC is * 10^6 → divide by 10^12 for INR units, * 100 for paise
-            let inr_paise_gross: u64 = (amount
-                .saturating_mul(fx_rate as u128)
-                .saturating_mul(100) / 1_000_000_000_000u128) as u64;
+            let inr_paise_gross = crate::compute_gross_inr_paise(amount, fx_rate);
 
             // Protocol fee
             let fee_bps = T::ProtocolFeeBps::get();
-            let fee_paise = inr_paise_gross * fee_bps / 10_000;
+            let fee_paise = crate::compute_fee_paise(inr_paise_gross, fee_bps);
             let inr_paise_net = inr_paise_gross.saturating_sub(fee_paise);
 
             // ── 5. Escrow funds ────────────────────────────────────────────
@@ -341,5 +350,23 @@ pub mod pallet {
             );
             sp_io::hashing::blake2_256(&input)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remittance_amount_math_is_stable() {
+        let amount_micro = 200_000_000u128; // 200 USDC
+        let fx_rate_scaled = 83_500_000u64; // 83.5
+        let gross = compute_gross_inr_paise(amount_micro, fx_rate_scaled);
+        let fee = compute_fee_paise(gross, 50); // 0.5%
+        let net = gross - fee;
+
+        assert!(gross > 0);
+        assert_eq!(fee, gross / 200);
+        assert!(net < gross);
     }
 }

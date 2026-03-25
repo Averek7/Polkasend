@@ -113,10 +113,23 @@ cp .env.example .env
 npm run dev
 
 # Backend only
-npm run backend
+npm run backend:dev
 
 # Both together
-npm run dev:all
+npm run dev:integrated
+```
+
+Updated integrated scripts:
+
+```bash
+# Frontend + backend (single command)
+npm run dev:integrated
+
+# Build backend + frontend
+npm run build:all
+
+# Local docker deployment
+npm run deploy:local
 ```
 
 Frontend: http://localhost:3000  

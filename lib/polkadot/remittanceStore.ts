@@ -90,16 +90,23 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
         currency: sendCurrency,
         deliveryMode,
       });
+      const payload = data?.data ?? data;
+      const resolvedOrderId = payload?.orderId ?? payload?.id;
+      const resolvedTxHash = payload?.txHash ?? null;
+
+      if (!resolvedOrderId) {
+        throw new Error("Order ID missing in remittance response");
+      }
 
       set({
-        orderId: data.orderId,
-        txHash: data.txHash,
+        orderId: resolvedOrderId,
+        txHash: resolvedTxHash,
         orderStatus: "RateLocked",
         isSubmitting: false,
       });
 
       // Start polling
-      get().pollOrderStatus(data.orderId);
+      get().pollOrderStatus(resolvedOrderId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Submission failed";
       set({ error: msg, isSubmitting: false });

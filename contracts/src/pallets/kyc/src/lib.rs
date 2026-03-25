@@ -27,6 +27,10 @@
 
 pub use pallet::*;
 
+pub fn is_valid_country_code(country_code: &[u8; 2]) -> bool {
+    country_code.iter().all(|b| b.is_ascii_uppercase())
+}
+
 #[frame_support::pallet]
 pub mod pallet {
     use frame_support::{
@@ -210,7 +214,7 @@ pub mod pallet {
             );
             // Basic country code validation
             ensure!(
-                country_code.iter().all(|b| b.is_ascii_uppercase()),
+                crate::is_valid_country_code(&country_code),
                 Error::<T>::InvalidCountryCode
             );
 
@@ -360,9 +364,12 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use frame_support::{assert_noop, assert_ok, parameter_types};
 
-    // Test suite would go here using sp_runtime mock runtime
-    // Tests cover: submit_kyc, approve_kyc, check_and_update_limit, ytd_reset,
-    // annual_limit_exceeded, kyc_expired, revoke_kyc
+    #[test]
+    fn country_code_validation_works() {
+        assert!(is_valid_country_code(b"IN"));
+        assert!(is_valid_country_code(b"US"));
+        assert!(!is_valid_country_code(b"in"));
+        assert!(!is_valid_country_code(b"U1"));
+    }
 }

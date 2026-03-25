@@ -1,20 +1,27 @@
-import winston from 'winston';
+import winston from "winston";
+
+interface LogInfo {
+  timestamp: string;
+  level: string;
+  message: string;
+  stack?: string;
+}
 
 export const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env.LOG_LEVEL || "info",
   format: winston.format.combine(
-    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
     winston.format.errors({ stack: true }),
     winston.format.colorize(),
-    winston.format.printf(({ timestamp, level, message, stack }) =>
+    winston.format.printf(({ timestamp, level, message, stack }: LogInfo) =>
       stack
         ? `${timestamp} [${level}]: ${message}\n${stack}`
-        : `${timestamp} [${level}]: ${message}`
-    )
+        : `${timestamp} [${level}]: ${message}`,
+    ),
   ),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' }),
+    new winston.transports.File({ filename: "logs/error.log", level: "error" }),
+    new winston.transports.File({ filename: "logs/combined.log" }),
   ],
 });
