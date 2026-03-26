@@ -1,8 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../config/logger';
 import { getUsdInrRate } from './fxOracle';
+import { remittanceOrderRepository } from '../repositories/remittanceOrderRepository';
 
-// ─── Types ────────────────────────────────────────────────────────
 export type DeliveryMode = 'UPI_INSTANT' | 'IMPS_NEFT' | 'IINR_WALLET' | 'AADHAAR_PAY';
 export type OrderStatus =
   | 'INITIATED'
@@ -19,9 +19,13 @@ export interface RemittanceOrder {
   sender: string;
   recipient: string;
   assetSymbol: string;
-  amountIn: number;           // USDC/USDT amount
-  amountOutInrPaise: number;  // locked INR in paise
-  fxRateLocked: number;       // rate at lock time
+  assetId: number;
+  amountIn: number;
+  amountInMinor: string;
+  amountOutInrPaise: number;
+  fxRateLocked: number;
+  fxRateLockedScaled: number;
+  protocolFeeBps: number;
   protocolFeePaise: number;
   deliveryMode: DeliveryMode;
   status: OrderStatus;
@@ -40,14 +44,14 @@ export interface OrderEvent {
   data?: Record<string, unknown>;
 }
 
-// ─── In-memory store (replace with DB in production) ──────────────
-const orders = new Map<string, RemittanceOrder>();
-
-// ─── Constants ────────────────────────────────────────────────────
-const PROTOCOL_FEE_BPS = 50; // 0.5%
+const PROTOCOL_FEE_BPS = 50;
 const RATE_LOCK_MINUTES = 15;
+const ASSET_IDS: Record<string, number> = {
+  USDC: 1337,
+  USDT: 1984,
+  DAI: 1338,
+};
 
-// ─── Service functions ────────────────────────────────────────────
 export async function createOrder(params: {
   sender: string;
   recipient: string;
@@ -60,6 +64,7 @@ export async function createOrder(params: {
   const grossInrPaise = Math.round(params.amountIn * rate * 100);
   const feePaise = Math.round(grossInrPaise * (PROTOCOL_FEE_BPS / 10000));
   const netInrPaise = grossInrPaise - feePaise;
+  const assetId = ASSET_IDS[params.assetSymbol] ?? 0;
 
   const now = new Date();
   const order: RemittanceOrder = {
@@ -67,9 +72,13 @@ export async function createOrder(params: {
     sender: params.sender,
     recipient: params.recipient,
     assetSymbol: params.assetSymbol,
+    assetId,
     amountIn: params.amountIn,
+    amountInMinor: Math.round(params.amountIn * 1_000_000).toString(),
     amountOutInrPaise: netInrPaise,
     fxRateLocked: rate,
+    fxRateLockedScaled: Math.round(rate * 1_000_000),
+    protocolFeeBps: PROTOCOL_FEE_BPS,
     protocolFeePaise: feePaise,
     deliveryMode: params.deliveryMode,
     status: 'RATE_LOCKED',
@@ -79,34 +88,32 @@ export async function createOrder(params: {
     events: [
       {
         type: 'ORDER_CREATED',
-        message: `Order created. FX rate locked at ₹${rate}`,
+        message: `Order created. FX rate locked at INR ${rate}`,
         timestamp: now,
         data: { fxRate: rate, grossInrPaise, netInrPaise, feePaise },
       },
     ],
   };
 
-  orders.set(order.id, order);
-  logger.info(`Order created: ${order.id} | ${params.amountIn} ${params.assetSymbol} → ₹${netInrPaise / 100}`);
+  await remittanceOrderRepository.save(order);
+  logger.info(`Order created: ${order.id} | ${params.amountIn} ${params.assetSymbol} -> INR ${netInrPaise / 100}`);
   return order;
 }
 
-export function getOrder(id: string): RemittanceOrder | undefined {
-  return orders.get(id);
+export async function getOrder(id: string): Promise<RemittanceOrder | undefined> {
+  return remittanceOrderRepository.findById(id);
 }
 
-export function listOrdersBySender(sender: string): RemittanceOrder[] {
-  return Array.from(orders.values())
-    .filter((o) => o.sender.toLowerCase() === sender.toLowerCase())
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+export async function listOrdersBySender(sender: string): Promise<RemittanceOrder[]> {
+  return remittanceOrderRepository.listBySender(sender);
 }
 
-export function updateOrderStatus(
+export async function updateOrderStatus(
   id: string,
   status: OrderStatus,
-  eventData?: { type: string; message: string; data?: Record<string, unknown> }
-): RemittanceOrder | null {
-  const order = orders.get(id);
+  eventData?: { type: string; message: string; data?: Record<string, unknown> },
+): Promise<RemittanceOrder | null> {
+  const order = await remittanceOrderRepository.findById(id);
   if (!order) return null;
 
   order.status = status;
@@ -121,32 +128,35 @@ export function updateOrderStatus(
     });
   }
 
-  logger.info(`Order ${id} → ${status}`);
-  return order;
+  logger.info(`Order ${id} -> ${status}`);
+  return remittanceOrderRepository.save(order);
 }
 
-export function confirmSettlement(id: string, utrNumber: string): RemittanceOrder | null {
-  const existing = getOrder(id);
+export async function confirmSettlement(id: string, utrNumber: string): Promise<RemittanceOrder | null> {
+  const existing = await remittanceOrderRepository.findById(id);
   if (!existing) return null;
 
-  const order = updateOrderStatus(id, 'COMPLETED', {
+  const order = await updateOrderStatus(id, 'COMPLETED', {
     type: 'SETTLEMENT_CONFIRMED',
     message: `INR delivered via ${existing.deliveryMode}. UTR: ${utrNumber}`,
     data: { utrNumber },
   });
-  if (order) order.utrNumber = utrNumber;
-  return order;
+  if (!order) return null;
+
+  order.utrNumber = utrNumber;
+  return remittanceOrderRepository.save(order);
 }
 
-// Auto-expire orders past their lock time
-export function pruneExpiredOrders(): void {
+export async function pruneExpiredOrders(): Promise<void> {
   const now = new Date();
-  for (const [id, order] of orders.entries()) {
+  const orders = await remittanceOrderRepository.listAll();
+
+  for (const order of orders) {
     if (
       order.expiresAt < now &&
       !['COMPLETED', 'FAILED', 'EXPIRED'].includes(order.status)
     ) {
-      updateOrderStatus(id, 'EXPIRED', {
+      await updateOrderStatus(order.id, 'EXPIRED', {
         type: 'ORDER_EXPIRED',
         message: 'Rate lock expired. Please initiate a new order.',
       });
@@ -154,8 +164,10 @@ export function pruneExpiredOrders(): void {
   }
 }
 
-setInterval(pruneExpiredOrders, 60_000);
+setInterval(() => {
+  void pruneExpiredOrders();
+}, 60_000);
 
-export function __resetOrdersForTests(): void {
-  orders.clear();
+export async function __resetOrdersForTests(): Promise<void> {
+  await remittanceOrderRepository.clear();
 }

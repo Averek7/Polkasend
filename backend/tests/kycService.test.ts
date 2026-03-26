@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  __resetKycForTests,
   amlScreen,
   checkAndUpdateLimit,
   getKycRecord,
@@ -7,18 +8,22 @@ import {
 } from "../src/services/kycService";
 
 describe("kycService", () => {
-  it("creates and returns kyc record", () => {
+  beforeEach(async () => {
+    await __resetKycForTests();
+  });
+
+  it("creates and returns kyc record", async () => {
     const address = "0xabc000000000000000000000000000000000001";
-    setKycRecord(address, "FULL_KYC", "IN");
-    const record = getKycRecord(address);
+    await setKycRecord(address, "FULL_KYC", "IN");
+    const record = await getKycRecord(address);
 
     expect(record).toBeDefined();
     expect(record?.level).toBe("FULL_KYC");
     expect(record?.countryCode).toBe("IN");
   });
 
-  it("rejects spending when kyc is missing", () => {
-    const result = checkAndUpdateLimit(
+  it("rejects spending when kyc is missing", async () => {
+    const result = await checkAndUpdateLimit(
       "0xmissing00000000000000000000000000000000",
       100_00,
     );

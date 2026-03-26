@@ -6,6 +6,10 @@
 
 # Compilation output
 /dist
+/backend/dist
+/backend/.data
+/backend/logs
+/backend/tests/*.js
 
 # pnpm deploy output
 /bundle
@@ -16,6 +20,7 @@
 # Environment variables file
 .env
 .env.*.local
+/backend/.env
 
 # Hardhat compilation (v2) support directory
 /cache
