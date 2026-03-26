@@ -6,6 +6,10 @@
 
 # Compilation output
 /dist
+/backend/dist
+/backend/.data
+/backend/logs
+/backend/tests/*.js
 
 # pnpm deploy output
 /bundle
