@@ -71,3 +71,7 @@ export function amlScreen(address: string): { pass: boolean; reason?: string } {
   }
   return { pass: true };
 }
+
+export async function __resetKycForTests(): Promise<void> {
+  await kycRepository.clear();
+}

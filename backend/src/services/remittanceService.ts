@@ -167,3 +167,7 @@ export async function pruneExpiredOrders(): Promise<void> {
 setInterval(() => {
   void pruneExpiredOrders();
 }, 60_000);
+
+export async function __resetOrdersForTests(): Promise<void> {
+  await remittanceOrderRepository.clear();
+}

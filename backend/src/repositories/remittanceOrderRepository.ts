@@ -21,6 +21,7 @@ export interface RemittanceOrderRepository {
   findById(id: string): Promise<RemittanceOrder | undefined>;
   listBySender(sender: string): Promise<RemittanceOrder[]>;
   listAll(): Promise<RemittanceOrder[]>;
+  clear(): Promise<void>;
 }
 
 function serialize(order: RemittanceOrder): StoredOrder {
@@ -144,6 +145,11 @@ class FileBackedRemittanceOrderRepository implements RemittanceOrderRepository {
     return Array.from(this.orders.values());
   }
 
+  async clear(): Promise<void> {
+    this.orders.clear();
+    this.flush();
+  }
+
   private flush() {
     writeCollection(
       STORAGE_FILE,
@@ -261,6 +267,11 @@ class PrismaRemittanceOrderRepository implements RemittanceOrderRepository {
     });
 
     return orders.map(fromPrismaOrder);
+  }
+
+  async clear(): Promise<void> {
+    await prisma.remittanceOrderEvent.deleteMany();
+    await prisma.remittanceOrder.deleteMany();
   }
 }
 

@@ -13,6 +13,7 @@ export interface KycRepository {
   save(record: KycRecord): Promise<KycRecord>;
   findByAddress(address: string): Promise<KycRecord | undefined>;
   listAll(): Promise<KycRecord[]>;
+  clear(): Promise<void>;
 }
 
 function serialize(record: KycRecord): StoredKycRecord {
@@ -79,6 +80,11 @@ class FileBackedKycRepository implements KycRepository {
     return Array.from(this.records.values());
   }
 
+  async clear(): Promise<void> {
+    this.records.clear();
+    this.flush();
+  }
+
   private flush() {
     writeCollection(
       STORAGE_FILE,
@@ -128,6 +134,10 @@ class PrismaKycRepository implements KycRepository {
   async listAll(): Promise<KycRecord[]> {
     const records = await prisma.kycRecord.findMany();
     return records.map(fromPrismaRecord);
+  }
+
+  async clear(): Promise<void> {
+    await prisma.kycRecord.deleteMany();
   }
 }
 
