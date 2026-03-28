@@ -4,6 +4,37 @@ import axios from "axios";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 export type DeliveryMode = "upi" | "imps" | "iinr" | "aadhaar";
+export type ClientOrderStatus =
+  | "Initiated"
+  | "RateLocked"
+  | "CompliancePassed"
+  | "SettlementTriggered"
+  | "Completed"
+  | "Failed";
+
+export interface ContractContext {
+  chainId: string;
+  paraId: number;
+  palletCall: string;
+  args: {
+    recipient: string;
+    assetId: number;
+    amount: string;
+    deliveryMode: string;
+  };
+  quote: {
+    fxRateScaled: number;
+    amountOutInrPaise: number;
+    feeBps: number;
+  };
+}
+
+export interface OrderTimelineEvent {
+  type: string;
+  message: string;
+  timestamp: string;
+  data?: Record<string, unknown>;
+}
 
 export interface RemittanceState {
   // Form state
@@ -19,9 +50,13 @@ export interface RemittanceState {
 
   // Order lifecycle
   orderId: string | null;
-  orderStatus: string | null;
+  orderStatus: ClientOrderStatus | null;
+  contractStatus: string | null;
   utrNumber: string | null;
   txHash: string | null;
+  integrationMode: string | null;
+  contractContext: ContractContext | null;
+  timeline: OrderTimelineEvent[];
   isSubmitting: boolean;
   error: string | null;
 
@@ -49,8 +84,12 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
   feePct: FEE_PCT * 100,
   orderId: null,
   orderStatus: null,
+  contractStatus: null,
   utrNumber: null,
   txHash: null,
+  integrationMode: null,
+  contractContext: null,
+  timeline: [],
   isSubmitting: false,
   error: null,
 
@@ -101,7 +140,11 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
       set({
         orderId: resolvedOrderId,
         txHash: resolvedTxHash,
-        orderStatus: "RateLocked",
+        orderStatus: (payload?.status as ClientOrderStatus | undefined) ?? "RateLocked",
+        contractStatus: payload?.contractStatus ?? null,
+        integrationMode: payload?.integrationMode ?? null,
+        contractContext: payload?.contract ?? null,
+        timeline: payload?.timeline ?? [],
         isSubmitting: false,
       });
 
@@ -121,7 +164,14 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
         const { data } = await axios.get(`${API_BASE}/remittance`, {
           params: { orderId },
         });
-        set({ orderStatus: data.status, utrNumber: data.utrNumber ?? null });
+        set({
+          orderStatus: (data.status as ClientOrderStatus | undefined) ?? null,
+          contractStatus: data.contractStatus ?? null,
+          utrNumber: data.utrNumber ?? null,
+          integrationMode: data.integrationMode ?? null,
+          contractContext: data.contract ?? null,
+          timeline: data.timeline ?? [],
+        });
         if (data.status !== "Completed" && data.status !== "Failed") {
           setTimeout(poll, 3000);
         }
@@ -136,8 +186,12 @@ export const useRemittanceStore = create<RemittanceState>((set, get) => ({
     set({
       orderId: null,
       orderStatus: null,
+      contractStatus: null,
       utrNumber: null,
       txHash: null,
+      integrationMode: null,
+      contractContext: null,
+      timeline: [],
       isSubmitting: false,
       error: null,
     }),

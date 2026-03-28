@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { getUsdInrRate } from '../services/fxOracle';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
 
@@ -17,7 +18,7 @@ const DELIVERY_SECONDS: Record<string, number> = {
   AADHAAR_PAY:  45,
 };
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const parsed = QuoteSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, error: parsed.error.flatten() });
@@ -60,6 +61,6 @@ router.post('/', async (req: Request, res: Response) => {
       },
     },
   });
-});
+}));
 
 export default router;

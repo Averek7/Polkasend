@@ -1,8 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
+import { getApiRuntimeMode } from '../_lib/runtimeMode';
+
+type BackendKycRecord = {
+  level?: 'NONE' | 'BASIC_KYC' | 'FULL_KYC' | 'INSTITUTIONAL';
+  address?: string;
+  annualLimitUsdCents?: number;
+  ytdSentUsdCents?: number;
+  approvedAt?: string;
+  expiresAt?: string | null;
+  countryCode?: string;
+};
+
+type BackendKycResponse = {
+  success: boolean;
+  data?: BackendKycRecord;
+  error?: string;
+};
+
+function normalizeKycLevel(level?: string) {
+  const levelMap: Record<string, string> = {
+    NONE: 'None',
+    BASIC_KYC: 'BasicKyc',
+    FULL_KYC: 'FullKyc',
+    INSTITUTIONAL: 'InstitutionalKyc',
+    BasicKyc: 'BasicKyc',
+    FullKyc: 'FullKyc',
+    InstitutionalKyc: 'InstitutionalKyc',
+  };
+
+  return levelMap[level ?? ''] ?? 'None';
+}
+
+function annualLimitForLevel(level: string) {
+  const annualLimits: Record<string, number> = {
+    BasicKyc: 250_000,
+    FullKyc: 25_000_000,
+    InstitutionalKyc: 1_000_000_000,
+    None: 0,
+  };
+
+  return annualLimits[level] ?? 0;
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const { integrationMode } = getApiRuntimeMode();
     const body = await req.json();
     const { address, level, aadhaarNumber, panNumber, countryCode } = body;
 
@@ -21,21 +64,16 @@ export async function POST(req: NextRequest) {
     // In production: call pallet_kyc::submit_kyc extrinsic
     // Store hashes on-chain; raw data goes to encrypted off-chain storage (IPFS + AES)
 
-    const annualLimits: Record<string, number> = {
-      BasicKyc:          250_000,        // $2,500 in cents
-      FullKyc:           25_000_000,     // $250,000 in cents
-      InstitutionalKyc:  1_000_000_000,  // $10M in cents
-    };
-
     return NextResponse.json({
       success: true,
       address,
       level,
       aadhaarHash,
       panHash,
-      annualLimitUsdCents: annualLimits[level] ?? 250_000,
+      annualLimitUsdCents: annualLimitForLevel(level),
       status: 'PendingApproval', // Authority will approve via pallet
       message: 'KYC submitted. Approval typically takes 5–30 minutes.',
+      integrationMode,
     });
   } catch (err) {
     console.error('[kyc/submit]', err);
@@ -44,17 +82,49 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const { backendBaseUrl, backendEnabled, integrationMode } = getApiRuntimeMode();
   const address = req.nextUrl.searchParams.get('address');
   if (!address) {
     return NextResponse.json({ error: 'Address required' }, { status: 400 });
   }
 
-  // In production: query pallet_kyc::KycRecords on-chain
-  return NextResponse.json({
-    address,
-    level: 'FullKyc',
-    annualLimitUsdCents: 25_000_000,
-    ytdSentUsdCents: 0,
-    approvedAt: new Date().toISOString(),
-  });
+  try {
+    if (!backendEnabled) {
+      throw new Error('Backend proxy disabled');
+    }
+
+    const response = await fetch(
+      `${backendBaseUrl}/api/kyc/${encodeURIComponent(address)}`,
+      { cache: 'no-store' },
+    );
+    const data = (await response.json()) as BackendKycResponse;
+
+    if (!response.ok || !data.success || !data.data) {
+      throw new Error(data.error ?? 'Backend kyc fetch failed');
+    }
+
+    const normalizedLevel = normalizeKycLevel(data.data.level);
+
+    return NextResponse.json({
+      address: data.data.address ?? address,
+      level: normalizedLevel,
+      annualLimitUsdCents: data.data.annualLimitUsdCents ?? annualLimitForLevel(normalizedLevel),
+      ytdSentUsdCents: data.data.ytdSentUsdCents ?? 0,
+      approvedAt: data.data.approvedAt ?? null,
+      expiresAt: data.data.expiresAt ?? null,
+      countryCode: data.data.countryCode ?? null,
+      source: 'backend',
+      integrationMode,
+    });
+  } catch {
+    return NextResponse.json({
+      address,
+      level: 'FullKyc',
+      annualLimitUsdCents: 25_000_000,
+      ytdSentUsdCents: 0,
+      approvedAt: new Date().toISOString(),
+      source: 'mock-fallback',
+      integrationMode,
+    });
+  }
 }

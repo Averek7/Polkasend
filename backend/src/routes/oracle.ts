@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { getUsdInrRate, getRateMultiplied } from '../services/fxOracle';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 const router = Router();
 
-router.get('/fx/usdinr', async (_req: Request, res: Response) => {
+router.get('/fx/usdinr', asyncHandler(async (_req: Request, res: Response) => {
   const { rate, sources, cached } = await getUsdInrRate();
   return res.json({
     success: true,
@@ -18,6 +19,6 @@ router.get('/fx/usdinr', async (_req: Request, res: Response) => {
       deviationLimit: '5%',
     },
   });
-});
+}));
 
 export default router;

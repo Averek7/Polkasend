@@ -1,6 +1,6 @@
 # PolkaSend 🔴
 
-> Cross-border remittance to India via Polkadot parachain. Under 0.5% fee. ~36 second settlement.
+> Cross-border remittance product with a Web2-safe API boundary and a deferred Polkadot contract integration path.
 
 [![Polkadot](https://img.shields.io/badge/Polkadot-Parachain%20%233000-E6007A)](https://polkadot.network)
 [![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org)
@@ -27,9 +27,11 @@ PolkaSend is a purpose-built Polkadot parachain for cross-border remittance to I
 
 ```
 Frontend (Next.js 14)
-    ↕ REST + WebSocket
+    ↕
+Next API Boundary (app/api)
+    ↕ optional proxy
 Backend (Express.js)
-    ↕ Polkadot.js API
+    ↕ deferred integration
 PolkaSend Parachain #3000 (Substrate)
     ├── pallet_kyc          — KYC/AML, Aadhaar, FEMA limits
     ├── pallet_remittance   — Core escrow + routing
@@ -43,6 +45,12 @@ Moonbeam Para #2004 (EVM entry point)
     ↕ Oracle API
 UPI / IMPS / NEFT (India settlement)
 ```
+
+Current operational default:
+
+- Frontend depends on `app/api/*`
+- Backend proxying is optional
+- Contracts are currently independent of the Web2 runtime path
 
 ---
 
@@ -72,11 +80,13 @@ polkasend/
 │   ├── xcm/                # XCM config & message builders
 │   └── interfaces/         # TypeScript types for pallets
 ├── backend/
-│   ├── server.js           # Express API server
-│   ├── routes/             # REST endpoints
-│   ├── services/           # Business logic
-│   ├── middleware/         # Auth, rate limiting
-│   └── models/             # Mongoose schemas
+│   ├── src/
+│   │   ├── routes/         # Express REST endpoints
+│   │   ├── services/       # Business logic
+│   │   ├── repositories/   # File/Prisma persistence
+│   │   └── lib/            # Shared backend utilities
+│   ├── prisma/             # Prisma schema
+│   └── tests/              # Backend tests
 ├── styles/
 │   └── globals.css
 ├── types/
@@ -90,26 +100,28 @@ polkasend/
 
 ### Prerequisites
 - Node.js 18+
-- MongoDB (optional, falls back to in-memory)
+- npm dependencies installed for both root and `backend/`
+- PostgreSQL only if using Prisma persistence
 - Polkadot.js browser extension (optional for demo mode)
 
 ### Install
 
 ```bash
 npm install
+npm --prefix backend install
 ```
 
 ### Environment
 
 ```bash
 cp .env.example .env
-# Edit .env with your values
+cp backend/.env.example backend/.env
 ```
 
 ### Development
 
 ```bash
-# Frontend only
+# Frontend only, Web2-safe mode
 npm run dev
 
 # Backend only
@@ -136,6 +148,21 @@ Frontend: http://localhost:3000
 Backend API: http://localhost:4000
 
 ---
+
+## Contract Readiness
+
+Current status:
+
+- Frontend and backend are structurally connected
+- Contract integration is intentionally deferred
+- The API boundary is prepared for future contract-backed responses
+
+Before contract optimization/integration resumes:
+
+1. Validate backend build and test execution locally
+2. Complete a frontend + backend dry run without relying on fallback mode
+3. Fix runtime/workspace buildability under [`contracts/`](/Users/averek7/Projects/Polkasend/contracts)
+4. Re-enable contract mode only after response contracts remain stable
 
 ## Custom Pallets
 

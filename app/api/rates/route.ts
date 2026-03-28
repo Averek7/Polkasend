@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-
-const backendBaseUrl = process.env.POLKASEND_BACKEND_URL ?? 'http://localhost:4000';
+import { getApiRuntimeMode } from '../_lib/runtimeMode';
 
 type BackendRatesResponse = {
   success: boolean;
@@ -19,7 +18,13 @@ type BackendRatesResponse = {
 let cachedRate: { rate: number; ts: number } | null = null;
 
 export async function GET() {
+  const { backendBaseUrl, backendEnabled, integrationMode } = getApiRuntimeMode();
+
   try {
+    if (!backendEnabled) {
+      throw new Error('Backend proxy disabled');
+    }
+
     const response = await fetch(`${backendBaseUrl}/api/rates`, { cache: 'no-store' });
     const data = (await response.json()) as BackendRatesResponse;
 
@@ -35,6 +40,7 @@ export async function GET() {
       sources: data.data.sources,
       rateScaled: data.data.rateScaled,
       cached: data.data.cached,
+      integrationMode,
     });
   } catch {
     const now = Date.now();
@@ -44,6 +50,7 @@ export async function GET() {
         rate: cachedRate.rate,
         source: 'cache',
         updatedAt: new Date(cachedRate.ts).toISOString(),
+        integrationMode,
       });
     }
 
@@ -58,6 +65,7 @@ export async function GET() {
       pair: 'USD/INR',
       source: 'mock-fallback',
       updatedAt: new Date(now).toISOString(),
+      integrationMode,
       breakdown: {
         source1: parseFloat((base + (Math.random() - 0.5) * 0.2).toFixed(4)),
         source2: parseFloat((base + (Math.random() - 0.5) * 0.2).toFixed(4)),
