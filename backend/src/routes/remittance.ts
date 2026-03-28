@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import {
   createOrder,
@@ -11,8 +12,16 @@ import {
   type RemittanceOrder,
 } from '../services/remittanceService';
 import { checkAndUpdateLimit, amlScreen } from '../services/kycService';
+import { asyncHandler } from '../middleware/asyncHandler';
+import { idempotency } from '../middleware/idempotency';
 
 const router = Router();
+const createOrderLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const PARA_ID = 3000;
 const CHAIN_ID = 'polkasend-para-3000';
 const PALLET_CALL = 'remittance.initiate_remittance';
@@ -164,7 +173,7 @@ function readOrderId(req: Request): string | null {
   return null;
 }
 
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', createOrderLimiter, idempotency(), asyncHandler(async (req: Request, res: Response) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, error: parsed.error.flatten() });
@@ -197,9 +206,9 @@ router.post('/', async (req: Request, res: Response) => {
 
   const order = await createOrder({ sender, recipient, assetSymbol, amountIn, deliveryMode });
   return res.status(201).json({ success: true, data: serializeOrder(order) });
-});
+}));
 
-router.get('/', async (req: Request, res: Response) => {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const orderId = readOrderId(req);
   if (!orderId) {
     return res.status(400).json({ success: false, error: 'orderId is required' });
@@ -224,23 +233,23 @@ router.get('/', async (req: Request, res: Response) => {
     updatedAt: serialized.updatedAt,
     etaSeconds: serialized.contractStatus === 'COMPLETED' ? 0 : 22,
   });
-});
+}));
 
-router.get('/sender/:address', async (req: Request, res: Response) => {
+router.get('/sender/:address', asyncHandler(async (req: Request, res: Response) => {
   const orders = (await listOrdersBySender(req.params.address)).map(serializeOrder);
   return res.json({ success: true, data: orders, count: orders.length });
-});
+}));
 
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const order = await getOrder(req.params.id);
   if (!order) {
     return res.status(404).json({ success: false, error: 'Order not found' });
   }
 
   return res.json({ success: true, data: serializeOrder(order) });
-});
+}));
 
-router.patch('/:id/confirm', async (req: Request, res: Response) => {
+router.patch('/:id/confirm', asyncHandler(async (req: Request, res: Response) => {
   const parsed = confirmSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, error: parsed.error.flatten() });
@@ -252,9 +261,9 @@ router.patch('/:id/confirm', async (req: Request, res: Response) => {
   }
 
   return res.json({ success: true, data: serializeOrder(order) });
-});
+}));
 
-router.patch('/:id/status', async (req: Request, res: Response) => {
+router.patch('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   const parsed = statusSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, error: parsed.error.flatten() });
@@ -269,6 +278,6 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   }
 
   return res.json({ success: true, data: serializeOrder(order) });
-});
+}));
 
 export default router;
