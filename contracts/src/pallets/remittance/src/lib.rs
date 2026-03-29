@@ -23,11 +23,10 @@ pub mod pallet {
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::*,
-        traits::fungibles::{Inspect, Transfer},
+        traits::fungibles::{Inspect, Mutate},
     };
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::StaticLookup;
-    use sp_std::vec::Vec;
 
     // ─── Delivery mode ────────────────────────────────────────────────────────
 
@@ -87,7 +86,7 @@ pub mod pallet {
             + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type Assets: Inspect<Self::AccountId, AssetId = u32, Balance = u128>
-            + Transfer<Self::AccountId>;
+            + Mutate<Self::AccountId>;
 
         #[pallet::constant]
         type TreasuryAccount: Get<Self::AccountId>;

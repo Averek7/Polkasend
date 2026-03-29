@@ -39,7 +39,7 @@ pub mod pallet {
         traits::Currency,
     };
     use frame_system::pallet_prelude::*;
-    use sp_std::vec::Vec;
+    use sp_runtime::traits::Saturating;
 
     // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -199,8 +199,8 @@ pub mod pallet {
             origin: OriginFor<T>,
             level: KycLevel,
             country_code: [u8; 2],
-            aadhaar_hash: Option<[u8; 32]>,
-            pan_hash: Option<[u8; 32]>,
+            _aadhaar_hash: Option<[u8; 32]>,
+            _pan_hash: Option<[u8; 32]>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -293,7 +293,7 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_initialize(block: BlockNumberFor<T>) -> Weight {
+        fn on_initialize(_block: BlockNumberFor<T>) -> Weight {
             // YTD resets are handled lazily in check_and_update_limit
             // This hook reserved for future on-chain batch resets if needed
             Weight::zero()
@@ -320,7 +320,8 @@ pub mod pallet {
 
                 // Lazy YTD reset (check if a year has passed since last reset)
                 let current_block = <frame_system::Pallet<T>>::block_number();
-                let blocks_since_reset = current_block.saturating_sub(record.ytd_reset_at);
+                let blocks_since_reset: BlockNumberFor<T> =
+                    current_block.saturating_sub(record.ytd_reset_at);
                 if blocks_since_reset >= T::BlocksPerYear::get() {
                     record.ytd_sent_usd_cents = 0;
                     record.ytd_reset_at = current_block;
