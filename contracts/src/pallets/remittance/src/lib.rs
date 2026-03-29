@@ -33,12 +33,16 @@ pub mod pallet {
     #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
     pub enum DeliveryMode {
         CryptoWallet,
-        UpiInstant    { upi_id: BoundedVec<u8, ConstU32<50>> },
-        BankTransfer  {
+        UpiInstant {
+            upi_id: BoundedVec<u8, ConstU32<50>>,
+        },
+        BankTransfer {
             ifsc: [u8; 11],
             account_number: BoundedVec<u8, ConstU32<20>>,
         },
-        AadhaarPay    { aadhaar_hash: [u8; 32] },
+        AadhaarPay {
+            aadhaar_hash: [u8; 32],
+        },
     }
 
     #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -47,8 +51,12 @@ pub mod pallet {
         RateLocked,
         CompliancePassed,
         SettlementTriggered,
-        Completed { utr_number: BoundedVec<u8, ConstU32<22>> },
-        Failed    { reason: BoundedVec<u8, ConstU32<64>> },
+        Completed {
+            utr_number: BoundedVec<u8, ConstU32<22>>,
+        },
+        Failed {
+            reason: BoundedVec<u8, ConstU32<64>>,
+        },
         Expired,
     }
 
@@ -82,8 +90,7 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config: frame_system::Config + pallet_kyc::Config {
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type Assets: Inspect<Self::AccountId, AssetId = u32, Balance = u128>
             + Mutate<Self::AccountId>;
@@ -140,13 +147,35 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        OrderCreated    { order_id: [u8; 32], sender: T::AccountId, amount_usdc: u128 },
-        RateLocked      { order_id: [u8; 32], fx_rate: u64, inr_amount_paise: u64 },
-        SettlementTrig  { order_id: [u8; 32] },
-        OrderCompleted  { order_id: [u8; 32], utr_number: BoundedVec<u8, ConstU32<22>> },
-        OrderFailed     { order_id: [u8; 32], reason: BoundedVec<u8, ConstU32<64>> },
-        OrderExpired    { order_id: [u8; 32] },
-        FundsRefunded   { order_id: [u8; 32], sender: T::AccountId, amount: u128 },
+        OrderCreated {
+            order_id: [u8; 32],
+            sender: T::AccountId,
+            amount_usdc: u128,
+        },
+        RateLocked {
+            order_id: [u8; 32],
+            fx_rate: u64,
+            inr_amount_paise: u64,
+        },
+        SettlementTrig {
+            order_id: [u8; 32],
+        },
+        OrderCompleted {
+            order_id: [u8; 32],
+            utr_number: BoundedVec<u8, ConstU32<22>>,
+        },
+        OrderFailed {
+            order_id: [u8; 32],
+            reason: BoundedVec<u8, ConstU32<64>>,
+        },
+        OrderExpired {
+            order_id: [u8; 32],
+        },
+        FundsRefunded {
+            order_id: [u8; 32],
+            sender: T::AccountId,
+            amount: u128,
+        },
     }
 
     // ─── Errors ───────────────────────────────────────────────────────────────
@@ -205,8 +234,7 @@ pub mod pallet {
             pallet_kyc::Pallet::<T>::check_and_update_limit(&sender, amount_usd_cents)?;
 
             // ── 4. FX rate lock ────────────────────────────────────────────
-            let fx_rate = T::FxOracle::get_usdinr_rate()
-                .ok_or(Error::<T>::FxRateUnavailable)?;
+            let fx_rate = T::FxOracle::get_usdinr_rate().ok_or(Error::<T>::FxRateUnavailable)?;
 
             // INR paise = (USDC_micro * rate * 100) / 10^12
             // rate is * 10^6, USDC is * 10^6 → divide by 10^12 for INR units, * 100 for paise
@@ -248,7 +276,9 @@ pub mod pallet {
 
             Orders::<T>::insert(order_id, order);
             UserOrders::<T>::try_mutate(&sender, |orders| {
-                orders.try_push(order_id).map_err(|_| Error::<T>::TooManyOrders)
+                orders
+                    .try_push(order_id)
+                    .map_err(|_| Error::<T>::TooManyOrders)
             })?;
 
             TotalVolumeUsdc::<T>::mutate(|v| *v = v.saturating_add(amount));
@@ -293,21 +323,20 @@ pub mod pallet {
                 Ok::<(), DispatchError>(())
             })?;
 
-            Self::deposit_event(Event::OrderCompleted { order_id, utr_number });
+            Self::deposit_event(Event::OrderCompleted {
+                order_id,
+                utr_number,
+            });
             Ok(())
         }
 
         /// Expire and refund an order that has passed its rate lock window.
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(80_000_000, 8192))]
-        pub fn expire_order(
-            origin: OriginFor<T>,
-            order_id: [u8; 32],
-        ) -> DispatchResult {
+        pub fn expire_order(origin: OriginFor<T>, order_id: [u8; 32]) -> DispatchResult {
             ensure_signed(origin)?;
 
-            let order = Orders::<T>::get(order_id)
-                .ok_or(Error::<T>::OrderNotFound)?;
+            let order = Orders::<T>::get(order_id).ok_or(Error::<T>::OrderNotFound)?;
 
             let current_block = <frame_system::Pallet<T>>::block_number();
             ensure!(current_block > order.expires_at, Error::<T>::OrderExpired);
@@ -344,9 +373,7 @@ pub mod pallet {
             input.extend_from_slice(&sender.encode());
             input.extend_from_slice(&recipient.encode());
             input.extend_from_slice(&amount.encode());
-            input.extend_from_slice(
-                &<frame_system::Pallet<T>>::block_number().encode()
-            );
+            input.extend_from_slice(&<frame_system::Pallet<T>>::block_number().encode());
             sp_io::hashing::blake2_256(&input)
         }
     }
@@ -355,6 +382,133 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate as pallet_remittance;
+    use frame_support::{
+        assert_noop, assert_ok, construct_runtime, derive_impl, parameter_types,
+        traits::{AsEnsureOriginWithArg, ConstU32},
+    };
+    use pallet_kyc::pallet::KycLevel;
+    use sp_runtime::{traits::StaticLookup, BoundedVec, BuildStorage};
+
+    type AccountId = u64;
+    type Block = frame_system::mocking::MockBlock<Test>;
+
+    const ALICE: AccountId = 1;
+    const BOB: AccountId = 2;
+    const TREASURY: AccountId = 99;
+    const USDC_ASSET_ID: u32 = 1337;
+
+    construct_runtime!(
+        pub enum Test {
+            System: frame_system,
+            Balances: pallet_balances,
+            Assets: pallet_assets,
+            Kyc: pallet_kyc,
+            Remittance: pallet_remittance,
+        }
+    );
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl frame_system::Config for Test {
+        type Block = Block;
+        type AccountData = pallet_balances::AccountData<u64>;
+    }
+
+    #[derive_impl(pallet_balances::config_preludes::TestDefaultConfig)]
+    impl pallet_balances::Config for Test {
+        type AccountStore = System;
+    }
+
+    #[derive_impl(pallet_assets::config_preludes::TestDefaultConfig)]
+    impl pallet_assets::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Balance = u128;
+        type Currency = Balances;
+        type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
+        type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+        type Freezer = ();
+        type CallbackHandle = ();
+    }
+
+    parameter_types! {
+        pub const TreasuryAccount: AccountId = TREASURY;
+        pub const ProtocolFeeBps: u64 = 50;
+        pub const MinSendAmount: u128 = 1_000_000;
+        pub const RateLockBlocks: u64 = 10;
+        pub const BasicKycLimit: u64 = 250_000;
+        pub const FullKycLimit: u64 = 25_000_000;
+        pub const BlocksPerYear: u64 = 100;
+    }
+
+    impl pallet_kyc::pallet::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Currency = Balances;
+        type KycAuthority = frame_system::EnsureRoot<AccountId>;
+        type RevocationAuthority = frame_system::EnsureRoot<AccountId>;
+        type BasicKycLimitUsdCents = BasicKycLimit;
+        type FullKycLimitUsdCents = FullKycLimit;
+        type BlocksPerYear = BlocksPerYear;
+    }
+
+    pub struct TestFxOracle;
+    impl pallet::FxRateProvider for TestFxOracle {
+        fn get_usdinr_rate() -> Option<u64> {
+            Some(83_500_000)
+        }
+    }
+
+    impl pallet::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Assets = Assets;
+        type TreasuryAccount = TreasuryAccount;
+        type ProtocolFeeBps = ProtocolFeeBps;
+        type MinSendAmount = MinSendAmount;
+        type RateLockBlocks = RateLockBlocks;
+        type FxOracle = TestFxOracle;
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let mut storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .unwrap();
+
+        pallet_balances::GenesisConfig::<Test> {
+            balances: vec![(ALICE, 1_000_000), (BOB, 1_000_000), (TREASURY, 1_000_000)],
+        }
+        .assimilate_storage(&mut storage)
+        .unwrap();
+
+        pallet_assets::GenesisConfig::<Test> {
+            assets: vec![(USDC_ASSET_ID, ALICE, true, 1)],
+            metadata: vec![(USDC_ASSET_ID, "USD Coin".into(), "USDC".into(), 6)],
+            accounts: vec![(USDC_ASSET_ID, ALICE, 500_000_000)],
+            next_asset_id: None,
+        }
+        .assimilate_storage(&mut storage)
+        .unwrap();
+
+        let mut ext = sp_io::TestExternalities::new(storage);
+        ext.execute_with(|| System::set_block_number(1));
+        ext
+    }
+
+    fn approve_full_kyc(account: AccountId) {
+        assert_ok!(Kyc::submit_kyc(
+            RuntimeOrigin::signed(account),
+            KycLevel::FullKyc,
+            *b"IN",
+            None,
+            None,
+        ));
+        assert_ok!(Kyc::approve_kyc(
+            RuntimeOrigin::root(),
+            account,
+            *b"IN",
+            None,
+            None,
+            25_000_000,
+        ));
+    }
 
     #[test]
     fn remittance_amount_math_is_stable() {
@@ -367,5 +521,125 @@ mod tests {
         assert!(gross > 0);
         assert_eq!(fee, gross / 200);
         assert!(net < gross);
+    }
+
+    #[test]
+    fn initiate_remittance_escrows_funds_and_stores_order() {
+        new_test_ext().execute_with(|| {
+            approve_full_kyc(ALICE);
+
+            let sender_before = Assets::balance(USDC_ASSET_ID, &ALICE);
+            let treasury_before = Assets::balance(USDC_ASSET_ID, &TREASURY);
+
+            assert_ok!(Remittance::initiate_remittance(
+                RuntimeOrigin::signed(ALICE),
+                <Test as frame_system::Config>::Lookup::unlookup(BOB),
+                USDC_ASSET_ID,
+                200_000_000,
+                pallet::DeliveryMode::CryptoWallet,
+            ));
+
+            let order_ids = UserOrders::<Test>::get(ALICE);
+            assert_eq!(order_ids.len(), 1);
+            let order = Orders::<Test>::get(order_ids[0]).expect("order should exist");
+
+            assert_eq!(order.sender, ALICE);
+            assert_eq!(order.recipient, BOB);
+            assert_eq!(order.amount_in, 200_000_000);
+            assert!(matches!(order.status, pallet::RemittanceStatus::RateLocked));
+            assert_eq!(
+                Assets::balance(USDC_ASSET_ID, &ALICE),
+                sender_before - 200_000_000
+            );
+            assert_eq!(
+                Assets::balance(USDC_ASSET_ID, &TREASURY),
+                treasury_before + 200_000_000
+            );
+            assert_eq!(TotalVolumeUsdc::<Test>::get(), 200_000_000);
+        });
+    }
+
+    #[test]
+    fn initiate_remittance_requires_kyc() {
+        new_test_ext().execute_with(|| {
+            assert_noop!(
+                Remittance::initiate_remittance(
+                    RuntimeOrigin::signed(ALICE),
+                    <Test as frame_system::Config>::Lookup::unlookup(BOB),
+                    USDC_ASSET_ID,
+                    1_500_000,
+                    pallet::DeliveryMode::CryptoWallet,
+                ),
+                pallet::Error::<Test>::KycRequired
+            );
+        });
+    }
+
+    #[test]
+    fn confirm_and_expire_update_order_lifecycle() {
+        new_test_ext().execute_with(|| {
+            approve_full_kyc(ALICE);
+
+            assert_ok!(Remittance::initiate_remittance(
+                RuntimeOrigin::signed(ALICE),
+                <Test as frame_system::Config>::Lookup::unlookup(BOB),
+                USDC_ASSET_ID,
+                150_000_000,
+                pallet::DeliveryMode::UpiInstant {
+                    upi_id: BoundedVec::try_from(b"recipient@upi".to_vec()).unwrap(),
+                },
+            ));
+
+            let order_id = UserOrders::<Test>::get(ALICE)[0];
+            let utr_number: BoundedVec<u8, ConstU32<22>> =
+                BoundedVec::try_from(b"HDFC123456789012".to_vec()).unwrap();
+            assert_ok!(Remittance::confirm_settlement(
+                RuntimeOrigin::signed(77),
+                order_id,
+                utr_number.clone(),
+            ));
+
+            let order = Orders::<Test>::get(order_id).unwrap();
+            assert!(matches!(
+                order.status,
+                pallet::RemittanceStatus::Completed { .. }
+            ));
+
+            assert_noop!(
+                Remittance::confirm_settlement(RuntimeOrigin::signed(77), order_id, utr_number),
+                pallet::Error::<Test>::OrderAlreadyCompleted
+            );
+        });
+
+        new_test_ext().execute_with(|| {
+            approve_full_kyc(ALICE);
+            assert_ok!(Remittance::initiate_remittance(
+                RuntimeOrigin::signed(ALICE),
+                <Test as frame_system::Config>::Lookup::unlookup(BOB),
+                USDC_ASSET_ID,
+                100_000_000,
+                pallet::DeliveryMode::CryptoWallet,
+            ));
+
+            let order_id = UserOrders::<Test>::get(ALICE)[0];
+            let sender_before = Assets::balance(USDC_ASSET_ID, &ALICE);
+            let treasury_before = Assets::balance(USDC_ASSET_ID, &TREASURY);
+
+            System::set_block_number(20);
+            assert_ok!(Remittance::expire_order(
+                RuntimeOrigin::signed(ALICE),
+                order_id
+            ));
+
+            assert!(Orders::<Test>::get(order_id).is_none());
+            assert_eq!(
+                Assets::balance(USDC_ASSET_ID, &ALICE),
+                sender_before + 100_000_000
+            );
+            assert_eq!(
+                Assets::balance(USDC_ASSET_ID, &TREASURY),
+                treasury_before - 100_000_000
+            );
+        });
     }
 }

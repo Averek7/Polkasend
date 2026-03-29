@@ -33,11 +33,7 @@ pub fn is_valid_country_code(country_code: &[u8; 2]) -> bool {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::{
-        dispatch::DispatchResult,
-        pallet_prelude::*,
-        traits::Currency,
-    };
+    use frame_support::{dispatch::DispatchResult, pallet_prelude::*, traits::Currency};
     use frame_system::pallet_prelude::*;
     use sp_runtime::traits::Saturating;
 
@@ -50,9 +46,9 @@ pub mod pallet {
     #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
     pub enum KycLevel {
         None,
-        BasicKyc,           // $2,500/year limit
-        FullKyc,            // $250,000/year limit
-        InstitutionalKyc,   // Unlimited (AD-I category)
+        BasicKyc,         // $2,500/year limit
+        FullKyc,          // $250,000/year limit
+        InstitutionalKyc, // Unlimited (AD-I category)
     }
 
     impl Default for KycLevel {
@@ -88,8 +84,7 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type Currency: Currency<Self::AccountId>;
 
@@ -149,13 +144,27 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// A user submitted KYC documents for review
-        KycSubmitted { account: T::AccountId, level: KycLevel },
+        KycSubmitted {
+            account: T::AccountId,
+            level: KycLevel,
+        },
         /// KYC authority approved a submission
-        KycApproved { account: T::AccountId, level: KycLevel, annual_limit: u64 },
+        KycApproved {
+            account: T::AccountId,
+            level: KycLevel,
+            annual_limit: u64,
+        },
         /// KYC record was revoked
-        KycRevoked { account: T::AccountId, reason: BoundedVec<u8, ConstU32<128>> },
+        KycRevoked {
+            account: T::AccountId,
+            reason: BoundedVec<u8, ConstU32<128>>,
+        },
         /// YTD spending counter was updated
-        SpendingUpdated { account: T::AccountId, ytd_cents: u64, limit_cents: u64 },
+        SpendingUpdated {
+            account: T::AccountId,
+            ytd_cents: u64,
+            limit_cents: u64,
+        },
         /// YTD counter was reset at year boundary
         YtdReset { account: T::AccountId },
     }
@@ -221,7 +230,10 @@ pub mod pallet {
             let current_block = <frame_system::Pallet<T>>::block_number();
             PendingKyc::<T>::insert(&who, (level.clone(), current_block));
 
-            Self::deposit_event(Event::KycSubmitted { account: who, level });
+            Self::deposit_event(Event::KycSubmitted {
+                account: who,
+                level,
+            });
             Ok(())
         }
 
@@ -241,8 +253,8 @@ pub mod pallet {
         ) -> DispatchResult {
             T::KycAuthority::ensure_origin(origin)?;
 
-            let (level, _submitted_at) = PendingKyc::<T>::take(&account)
-                .ok_or(Error::<T>::PendingKycNotFound)?;
+            let (level, _submitted_at) =
+                PendingKyc::<T>::take(&account).ok_or(Error::<T>::PendingKycNotFound)?;
 
             let current_block = <frame_system::Pallet<T>>::block_number();
 
@@ -279,7 +291,10 @@ pub mod pallet {
             reason: BoundedVec<u8, ConstU32<128>>,
         ) -> DispatchResult {
             T::RevocationAuthority::ensure_origin(origin)?;
-            ensure!(KycRecords::<T>::contains_key(&account), Error::<T>::KycNotFound);
+            ensure!(
+                KycRecords::<T>::contains_key(&account),
+                Error::<T>::KycNotFound
+            );
 
             KycRecords::<T>::remove(&account);
             TotalApprovedKyc::<T>::mutate(|n| *n = n.saturating_sub(1));
@@ -336,9 +351,8 @@ pub mod pallet {
                 );
 
                 // Update counter
-                record.ytd_sent_usd_cents = record
-                    .ytd_sent_usd_cents
-                    .saturating_add(amount_usd_cents);
+                record.ytd_sent_usd_cents =
+                    record.ytd_sent_usd_cents.saturating_add(amount_usd_cents);
 
                 Ok(())
             })
@@ -365,6 +379,65 @@ pub mod pallet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate as pallet_kyc;
+    use frame_support::{
+        assert_noop, assert_ok, construct_runtime, derive_impl, parameter_types, traits::ConstU32,
+    };
+    use sp_runtime::{BoundedVec, BuildStorage};
+
+    type AccountId = u64;
+    type Block = frame_system::mocking::MockBlock<Test>;
+
+    construct_runtime!(
+        pub enum Test {
+            System: frame_system,
+            Balances: pallet_balances,
+            Kyc: pallet_kyc,
+        }
+    );
+
+    #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
+    impl frame_system::Config for Test {
+        type Block = Block;
+        type AccountData = pallet_balances::AccountData<u64>;
+    }
+
+    #[derive_impl(pallet_balances::config_preludes::TestDefaultConfig)]
+    impl pallet_balances::Config for Test {
+        type AccountStore = System;
+    }
+
+    parameter_types! {
+        pub const BasicKycLimit: u64 = 250_000;
+        pub const FullKycLimit: u64 = 25_000_000;
+        pub const TestBlocksPerYear: u64 = 10;
+    }
+
+    impl pallet::Config for Test {
+        type RuntimeEvent = RuntimeEvent;
+        type Currency = Balances;
+        type KycAuthority = frame_system::EnsureRoot<AccountId>;
+        type RevocationAuthority = frame_system::EnsureRoot<AccountId>;
+        type BasicKycLimitUsdCents = BasicKycLimit;
+        type FullKycLimitUsdCents = FullKycLimit;
+        type BlocksPerYear = TestBlocksPerYear;
+    }
+
+    fn new_test_ext() -> sp_io::TestExternalities {
+        let mut storage = frame_system::GenesisConfig::<Test>::default()
+            .build_storage()
+            .unwrap();
+
+        pallet_balances::GenesisConfig::<Test> {
+            balances: vec![(1, 1_000_000), (2, 1_000_000)],
+        }
+        .assimilate_storage(&mut storage)
+        .unwrap();
+
+        let mut ext = sp_io::TestExternalities::new(storage);
+        ext.execute_with(|| System::set_block_number(1));
+        ext
+    }
 
     #[test]
     fn country_code_validation_works() {
@@ -372,5 +445,125 @@ mod tests {
         assert!(is_valid_country_code(b"US"));
         assert!(!is_valid_country_code(b"in"));
         assert!(!is_valid_country_code(b"U1"));
+    }
+
+    #[test]
+    fn submit_and_approve_kyc_stores_record() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(Kyc::submit_kyc(
+                RuntimeOrigin::signed(1),
+                pallet::KycLevel::FullKyc,
+                *b"IN",
+                Some([1u8; 32]),
+                Some([2u8; 32]),
+            ));
+
+            assert_ok!(Kyc::approve_kyc(
+                RuntimeOrigin::root(),
+                1,
+                *b"IN",
+                Some([1u8; 32]),
+                Some([2u8; 32]),
+                25_000_000,
+            ));
+
+            let record = Kyc::kyc_records(1).expect("record should exist");
+            assert_eq!(record.level, pallet::KycLevel::FullKyc);
+            assert_eq!(record.country_code, *b"IN");
+            assert_eq!(record.annual_limit_usd_cents, 25_000_000);
+            assert_eq!(TotalApprovedKyc::<Test>::get(), 1);
+        });
+    }
+
+    #[test]
+    fn duplicate_pending_submission_is_rejected() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(Kyc::submit_kyc(
+                RuntimeOrigin::signed(1),
+                pallet::KycLevel::BasicKyc,
+                *b"IN",
+                None,
+                None,
+            ));
+
+            assert_noop!(
+                Kyc::submit_kyc(
+                    RuntimeOrigin::signed(1),
+                    pallet::KycLevel::FullKyc,
+                    *b"IN",
+                    None,
+                    None,
+                ),
+                pallet::Error::<Test>::PendingSubmissionExists
+            );
+        });
+    }
+
+    #[test]
+    fn revoke_kyc_removes_record() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(Kyc::submit_kyc(
+                RuntimeOrigin::signed(1),
+                pallet::KycLevel::BasicKyc,
+                *b"IN",
+                None,
+                None,
+            ));
+            assert_ok!(Kyc::approve_kyc(
+                RuntimeOrigin::root(),
+                1,
+                *b"IN",
+                None,
+                None,
+                250_000,
+            ));
+
+            let reason: BoundedVec<u8, ConstU32<128>> =
+                BoundedVec::try_from(b"suspicious activity".to_vec()).unwrap();
+            assert_ok!(Kyc::revoke_kyc(RuntimeOrigin::root(), 1, reason));
+
+            assert!(Kyc::kyc_records(1).is_none());
+            assert_eq!(TotalApprovedKyc::<Test>::get(), 0);
+        });
+    }
+
+    #[test]
+    fn check_and_update_limit_resets_and_enforces_expiry() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(Kyc::submit_kyc(
+                RuntimeOrigin::signed(1),
+                pallet::KycLevel::BasicKyc,
+                *b"IN",
+                None,
+                None,
+            ));
+            assert_ok!(Kyc::approve_kyc(
+                RuntimeOrigin::root(),
+                1,
+                *b"IN",
+                None,
+                None,
+                250_000,
+            ));
+
+            assert_ok!(Kyc::check_and_update_limit(&1, 100_000));
+            assert_eq!(Kyc::kyc_records(1).unwrap().ytd_sent_usd_cents, 100_000);
+
+            System::set_block_number(12);
+            assert_ok!(Kyc::check_and_update_limit(&1, 50_000));
+            let record = Kyc::kyc_records(1).unwrap();
+            assert_eq!(record.ytd_sent_usd_cents, 50_000);
+            assert_eq!(record.ytd_reset_at, 12);
+
+            KycRecords::<Test>::mutate(1, |maybe_record| {
+                let record = maybe_record.as_mut().unwrap();
+                record.expires_at = Some(11);
+            });
+
+            assert_noop!(
+                Kyc::check_and_update_limit(&1, 10_000),
+                pallet::Error::<Test>::KycExpired
+            );
+        });
     }
 }
