@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "src/runtime",
     "src/pallets/kyc",
     "src/pallets/remittance",
     "src/pallets/rate_lock",

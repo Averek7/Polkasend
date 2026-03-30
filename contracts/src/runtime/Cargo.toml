@@ -2,7 +2,7 @@
 name = "polkasend-runtime"
 version = "0.1.0"
 edition = "2021"
-description = "PolkaSend parachain runtime (Para #3000)"
+description = "PolkaSend integrated runtime"
 license = "Apache-2.0"
 
 [dependencies]
@@ -13,19 +13,32 @@ pallet-fiat-bridge = { path = "../pallets/fiat_bridge", default-features = false
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 pallet-assets = { workspace = true }
+pallet-balances = { workspace = true }
+sp-core = { workspace = true }
+sp-io = { workspace = true }
 sp-runtime = { workspace = true }
 sp-std = { workspace = true }
-sp-io = { workspace = true }
-sp-core = { workspace = true }
 sp-version = { git = "https://github.com/paritytech/polkadot-sdk", branch = "stable2409", default-features = false }
-xcm = { workspace = true }
-xcm-builder = { workspace = true }
-pallet-xcm = { workspace = true }
-cumulus-pallet-parachain-system = { workspace = true }
-cumulus-pallet-xcmp-queue = { workspace = true }
 scale-info = { workspace = true }
 parity-scale-codec = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["frame-support/std","frame-system/std","sp-runtime/std","sp-std/std","xcm/std","scale-info/std","parity-scale-codec/std","pallet-kyc/std","pallet-remittance/std","pallet-rate-lock/std","pallet-fiat-bridge/std"]
+runtime-benchmarks = []
+std = [
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-assets/std",
+    "pallet-balances/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-runtime/std",
+    "sp-std/std",
+    "sp-version/std",
+    "scale-info/std",
+    "parity-scale-codec/std",
+    "pallet-kyc/std",
+    "pallet-remittance/std",
+    "pallet-rate-lock/std",
+    "pallet-fiat-bridge/std",
+]
