@@ -24,15 +24,10 @@ pub fn parse_inr_rate_from_json(body: &[u8]) -> Option<f64> {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::{
-        dispatch::DispatchResult,
-        pallet_prelude::*,
-    };
+    use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::{
+        offchain::{AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer},
         pallet_prelude::*,
-        offchain::{
-            AppCrypto, CreateSignedTransaction, SendSignedTransaction, Signer,
-        },
     };
     use sp_runtime::{
         offchain::{http, Duration},
@@ -72,8 +67,7 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 
@@ -95,17 +89,22 @@ pub mod pallet {
 
     /// Historical rates ring buffer (last 24 entries = ~24 min)
     #[pallet::storage]
-    pub type RateHistory<T: Config> = StorageValue<
-        _,
-        BoundedVec<RateEntry<BlockNumberFor<T>>, ConstU32<24>>,
-        ValueQuery,
-    >;
+    pub type RateHistory<T: Config> =
+        StorageValue<_, BoundedVec<RateEntry<BlockNumberFor<T>>, ConstU32<24>>, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        RateUpdated { rate: u64, block: BlockNumberFor<T>, sources: u8 },
-        CircuitBreakerTripped { attempted_rate: u64, last_rate: u64, deviation_bps: u64 },
+        RateUpdated {
+            rate: u64,
+            block: BlockNumberFor<T>,
+            sources: u8,
+        },
+        CircuitBreakerTripped {
+            attempted_rate: u64,
+            last_rate: u64,
+            deviation_bps: u64,
+        },
     }
 
     #[pallet::error]
@@ -131,9 +130,8 @@ pub mod pallet {
                         log::warn!("rate_lock: no signing key available");
                         return;
                     }
-                    let results = signer.send_signed_transaction(|_account| {
-                        Call::submit_rate { rate }
-                    });
+                    let results =
+                        signer.send_signed_transaction(|_account| Call::submit_rate { rate });
                     for (_, result) in &results {
                         if let Err(e) = result {
                             log::error!("rate_lock: submit failed: {:?}", e);
@@ -152,7 +150,10 @@ pub mod pallet {
         #[pallet::weight(Weight::from_parts(50_000_000, 4096))]
         pub fn submit_rate(origin: OriginFor<T>, rate: u64) -> DispatchResult {
             ensure_signed(origin)?;
-            ensure!(rate > 0 && rate < 20_000_000_000u64, Error::<T>::InvalidRate); // 0 < rate < 20,000 INR/USD
+            ensure!(
+                rate > 0 && rate < 20_000_000_000u64,
+                Error::<T>::InvalidRate
+            ); // 0 < rate < 20,000 INR/USD
 
             // Circuit breaker: reject if >5% deviation from last known rate
             if let Some(last) = CurrentRate::<T>::get() {
@@ -212,8 +213,13 @@ pub mod pallet {
 
             for url in &sources {
                 let request = http::Request::get(*url);
-                let pending = request.deadline(deadline).send().map_err(|_| http::Error::IoError)?;
-                let response = pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
+                let pending = request
+                    .deadline(deadline)
+                    .send()
+                    .map_err(|_| http::Error::IoError)?;
+                let response = pending
+                    .try_wait(deadline)
+                    .map_err(|_| http::Error::DeadlineReached)??;
 
                 if response.code != 200 {
                     continue;

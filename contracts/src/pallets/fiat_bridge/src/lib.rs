@@ -27,10 +27,7 @@ pub fn is_valid_utr(utr: &[u8]) -> bool {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use frame_support::{
-        dispatch::DispatchResult,
-        pallet_prelude::*,
-    };
+    use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
 
     #[derive(Clone, Encode, Decode, PartialEq, Eq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
@@ -53,8 +50,7 @@ pub mod pallet {
 
     #[pallet::config]
     pub trait Config: frame_system::Config {
-        type RuntimeEvent: From<Event<Self>>
-            + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
         /// Governance origin to add/remove oracle accounts
         type GovernanceOrigin: EnsureOrigin<Self::RuntimeOrigin>;
@@ -77,13 +73,8 @@ pub mod pallet {
     /// Confirmations indexed by order ID (for auditability)
     #[pallet::storage]
     #[pallet::getter(fn confirmations)]
-    pub type Confirmations<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        [u8; 32],
-        UpiConfirmation<BlockNumberFor<T>>,
-        OptionQuery,
-    >;
+    pub type Confirmations<T: Config> =
+        StorageMap<_, Blake2_128Concat, [u8; 32], UpiConfirmation<BlockNumberFor<T>>, OptionQuery>;
 
     /// Total INR settled via this bridge (in paise)
     #[pallet::storage]
@@ -92,8 +83,13 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        OracleRegistered { account: T::AccountId, name: BoundedVec<u8, ConstU32<64>> },
-        OracleDeregistered { account: T::AccountId },
+        OracleRegistered {
+            account: T::AccountId,
+            name: BoundedVec<u8, ConstU32<64>>,
+        },
+        OracleDeregistered {
+            account: T::AccountId,
+        },
         UpiPaymentConfirmed {
             order_id: [u8; 32],
             utr_number: BoundedVec<u8, ConstU32<22>>,
@@ -122,7 +118,10 @@ pub mod pallet {
             name: BoundedVec<u8, ConstU32<64>>,
         ) -> DispatchResult {
             T::GovernanceOrigin::ensure_origin(origin)?;
-            ensure!(!Oracles::<T>::contains_key(&account), Error::<T>::OracleAlreadyRegistered);
+            ensure!(
+                !Oracles::<T>::contains_key(&account),
+                Error::<T>::OracleAlreadyRegistered
+            );
 
             let info = OracleInfo {
                 account: account.clone(),
@@ -151,10 +150,13 @@ pub mod pallet {
             let caller = ensure_signed(origin)?;
 
             // Validate oracle
-            let mut oracle_info = Oracles::<T>::get(&caller)
-                .ok_or(Error::<T>::UnauthorizedOracle)?;
+            let mut oracle_info =
+                Oracles::<T>::get(&caller).ok_or(Error::<T>::UnauthorizedOracle)?;
             ensure!(oracle_info.is_active, Error::<T>::OracleInactive);
-            ensure!(!Confirmations::<T>::contains_key(order_id), Error::<T>::AlreadyConfirmed);
+            ensure!(
+                !Confirmations::<T>::contains_key(order_id),
+                Error::<T>::AlreadyConfirmed
+            );
 
             // Basic UTR format: alphanumeric, 12–22 chars
             ensure!(
@@ -188,10 +190,7 @@ pub mod pallet {
         /// Deactivate an oracle (governance only)
         #[pallet::call_index(2)]
         #[pallet::weight(Weight::from_parts(30_000_000, 4096))]
-        pub fn deregister_oracle(
-            origin: OriginFor<T>,
-            account: T::AccountId,
-        ) -> DispatchResult {
+        pub fn deregister_oracle(origin: OriginFor<T>, account: T::AccountId) -> DispatchResult {
             T::GovernanceOrigin::ensure_origin(origin)?;
             Oracles::<T>::try_mutate(&account, |maybe_oracle| {
                 let oracle = maybe_oracle.as_mut().ok_or(Error::<T>::OracleNotFound)?;

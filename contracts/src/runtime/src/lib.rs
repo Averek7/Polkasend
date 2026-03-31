@@ -1,218 +1,206 @@
-//! # PolkaSend Runtime
-//!
-//! Parachain runtime for PolkaSend (Para ID #3000).
-//! Assembled using `construct_runtime!` macro with all custom pallets.
-
 #![cfg_attr(not(feature = "std"), no_std)]
 #![recursion_limit = "256"]
 
-extern crate alloc;
-
 use frame_support::{
-    construct_runtime, parameter_types,
-    traits::{ConstU32, ConstU64, Everything, Nothing},
-    weights::IdentityFee,
+    construct_runtime, derive_impl, parameter_types,
+    traits::{AsEnsureOriginWithArg, Everything},
 };
-use frame_system::limits::{BlockLength, BlockWeights};
+use parity_scale_codec::Encode;
 use sp_runtime::{
-    create_runtime_str, generic, impl_opaque_keys,
-    traits::{AccountIdLookup, BlakeTwo256, Block as BlockT},
-    transaction_validity::{TransactionSource, TransactionValidity},
-    ApplyExtrinsicResult, MultiAddress,
-};
-use sp_std::prelude::*;
-use xcm::latest::prelude::*;
-use xcm_builder::{
-    AccountId32Aliases, AllowTopLevelPaidExecutionFrom,
-    EnsureXcmOrigin, FixedWeightBounds, ParentIsPreset,
-    RelayChainAsNative, SiblingParachainAsNative, SiblingParachainConvertsVia,
-    SignedAccountId32AsNative, SignedToAccountId32, SovereignSignedViaLocation,
+    create_runtime_str, generic,
+    traits::{AccountIdLookup, BlakeTwo256, IdentifyAccount, Verify},
+    MultiAddress, MultiSignature,
 };
 
-pub type AccountId = sp_runtime::AccountId32;
+pub type Signature = MultiSignature;
+pub type AccountId = <<Signature as Verify>::Signer as IdentifyAccount>::AccountId;
+pub type Address = MultiAddress<AccountId, ()>;
 pub type Balance = u128;
-pub type BlockNumber = u32;
-pub type Hash = sp_core::H256;
 pub type Nonce = u32;
+pub type Hash = sp_core::H256;
+pub type BlockNumber = u32;
 
-pub mod opaque {
-    use super::*;
-    pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
-    pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
-    pub type Block = generic::Block<Header, UncheckedExtrinsic>;
-    pub type BlockId = generic::BlockId<Block>;
-}
-
-// ─── Runtime version ─────────────────────────────────────────────────────────
+pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
+pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 
 #[sp_version::runtime_version]
 pub const VERSION: sp_version::RuntimeVersion = sp_version::RuntimeVersion {
     spec_name: create_runtime_str!("polkasend"),
     impl_name: create_runtime_str!("polkasend"),
     authoring_version: 1,
-    spec_version: 1000,
-    impl_version: 0,
+    spec_version: 1,
+    impl_version: 1,
     apis: sp_version::create_apis_vec!([]),
     transaction_version: 1,
-    system_version: 1,
+    state_version: 1,
 };
 
-// ─── Parameters ──────────────────────────────────────────────────────────────
-
 parameter_types! {
-    pub const BlockHashCount: BlockNumber = 4096;
-    pub const Version: sp_version::RuntimeVersion = VERSION;
-
-    // PolkaSend-specific
-    pub const ProtocolFeeBps: u64 = 50;             // 0.5%
-    pub const MinSendAmount: u128 = 1_000_000;      // $1 USDC min
-    pub const RateLockBlocks: u32 = 150;            // ~15 min at 6s/block
-    pub const BasicKycLimitUsdCents: u64 = 250_000; // $2,500/year
-    pub const FullKycLimitUsdCents: u64 = 25_000_000; // $250,000/year
-    pub const BlocksPerYear: u32 = 5_256_000;       // 365.25 days * 86400 / 6
-    pub const RateUpdateInterval: u32 = 10;         // ~60s
-    pub const CircuitBreakerBps: u64 = 500;         // 5% max deviation
-
-    // PolkaSend treasury sovereign account
-    pub TreasuryAccount: AccountId = AccountId::from([0xfe; 32]);
-
-    // Parachain IDs
-    pub const PolkaSendParaId: u32 = 3000;
-    pub const AcalaParaId: u32 = 2000;
-    pub const AssetHubParaId: u32 = 1000;
-    pub const MoonbeamParaId: u32 = 2004;
+    pub Version: sp_version::RuntimeVersion = VERSION;
+    pub const BlockHashCount: BlockNumber = 256;
+    pub const SS58Prefix: u16 = 42;
+    pub const ExistentialDeposit: Balance = 1;
+    pub const TreasuryAccount: AccountId = AccountId::new([0xfe; 32]);
+    pub const ProtocolFeeBps: u64 = 50;
+    pub const MinSendAmount: u128 = 1_000_000;
+    pub const RateLockBlocks: BlockNumber = 150;
+    pub const BasicKycLimitUsdCents: u64 = 250_000;
+    pub const FullKycLimitUsdCents: u64 = 25_000_000;
+    pub const BlocksPerYear: BlockNumber = 5_256_000;
+    pub const RateUpdateInterval: BlockNumber = 10;
+    pub const CircuitBreakerBps: u64 = 500;
+    pub const AssetDeposit: Balance = 1;
+    pub const AssetAccountDeposit: Balance = 10;
+    pub const MetadataDepositBase: Balance = 1;
+    pub const MetadataDepositPerByte: Balance = 1;
+    pub const ApprovalDeposit: Balance = 1;
 }
 
-// ─── construct_runtime! ───────────────────────────────────────────────────────
-//
-// This is the complete runtime composition for the PolkaSend parachain.
-// Each pallet is assigned a unique index for SCALE encoding of extrinsics.
+pub type SignedExtra = (
+    frame_system::CheckNonZeroSender<Runtime>,
+    frame_system::CheckSpecVersion<Runtime>,
+    frame_system::CheckTxVersion<Runtime>,
+    frame_system::CheckGenesis<Runtime>,
+    frame_system::CheckEra<Runtime>,
+    frame_system::CheckNonce<Runtime>,
+    frame_system::CheckWeight<Runtime>,
+);
+
+pub type UncheckedExtrinsic =
+    generic::UncheckedExtrinsic<Address, RuntimeCall, Signature, SignedExtra>;
+pub type SignedPayload = generic::SignedPayload<RuntimeCall, SignedExtra>;
 
 construct_runtime!(
-    pub enum Runtime where
-        Block = opaque::Block,
-        NodeBlock = opaque::Block,
-        UncheckedExtrinsic = opaque::UncheckedExtrinsic,
-    {
-        // ── Core system (0–9) ─────────────────────────────────────────────────
-        System:             frame_system                         = 0,
-        Timestamp:          pallet_timestamp                     = 1,
-        ParachainSystem:    cumulus_pallet_parachain_system      = 2,
-        ParachainInfo:      parachain_info                       = 3,
-
-        // ── Consensus / collator selection (4–9) ─────────────────────────────
-        Aura:               pallet_aura                          = 4,
-        AuraExt:            cumulus_pallet_aura_ext              = 5,
-        CollatorSelection:  pallet_collator_selection            = 6,
-        Session:            pallet_session                       = 7,
-
-        // ── Balances & fees (10–19) ───────────────────────────────────────────
-        Balances:           pallet_balances                      = 10,
-        TransactionPayment: pallet_transaction_payment           = 11,
-        Assets:             pallet_assets                        = 12,   // USDC, USDT, iINR
-
-        // ── XCM / cross-chain (20–29) ─────────────────────────────────────────
-        XcmpQueue:          cumulus_pallet_xcmp_queue            = 20,
-        PolkadotXcm:        pallet_xcm                           = 21,
-        CumulusXcm:         cumulus_pallet_xcm                   = 22,
-        DmpQueue:           cumulus_pallet_dmp_queue             = 23,
-        MessageQueue:       pallet_message_queue                 = 24,
-
-        // ── PolkaSend custom pallets (30–39) ──────────────────────────────────
-        Kyc:                pallet_kyc                           = 30,
-        Remittance:         pallet_remittance                    = 31,
-        RateLock:           pallet_rate_lock                     = 32,
-        FiatBridge:         pallet_fiat_bridge                   = 33,
-        // LiquidityPool (iINR minting/burning) — Phase 2
-        // ComplianceLimits (on-chain governance of FEMA thresholds) — Phase 2
-
-        // ── Governance (40–49) ────────────────────────────────────────────────
-        Treasury:           pallet_treasury                      = 40,
-        Democracy:          pallet_democracy                     = 41,
-        Council:            pallet_collective::<Instance1>       = 42,
-        TechnicalCommittee: pallet_collective::<Instance2>       = 43,
-
-        // ── Utilities (50–59) ─────────────────────────────────────────────────
-        Utility:            pallet_utility                       = 50,
-        Multisig:           pallet_multisig                      = 51,
-        Proxy:              pallet_proxy                         = 52,
+    pub enum Runtime {
+        System: frame_system,
+        Balances: pallet_balances,
+        Assets: pallet_assets,
+        Kyc: pallet_kyc,
+        RateLock: pallet_rate_lock,
+        FiatBridge: pallet_fiat_bridge,
+        Remittance: pallet_remittance,
     }
 );
 
-// ─── Asset IDs ────────────────────────────────────────────────────────────────
-
-pub mod asset_ids {
-    /// USDC (via AssetHub)
-    pub const USDC: u32 = 1337;
-    /// USDT (via AssetHub)
-    pub const USDT: u32 = 1984;
-    /// DAI (via Moonbeam bridge)
-    pub const DAI: u32 = 1338;
-    /// iINR — PolkaSend's native INR stablecoin
-    pub const IINR: u32 = 9000;
-    /// PST — PolkaSend protocol token
-    pub const PST: u32 = 9001;
+#[derive_impl(frame_system::config_preludes::SolochainDefaultConfig)]
+impl frame_system::Config for Runtime {
+    type Block = Block;
+    type Nonce = Nonce;
+    type Hash = Hash;
+    type AccountId = AccountId;
+    type Lookup = AccountIdLookup<AccountId, ()>;
+    type BlockHashCount = BlockHashCount;
+    type Version = Version;
+    type AccountData = pallet_balances::AccountData<Balance>;
+    type SS58Prefix = SS58Prefix;
+    type BaseCallFilter = Everything;
 }
 
-// ─── XCM Config ──────────────────────────────────────────────────────────────
-
-pub struct XcmConfig;
-
-impl xcm_executor::Config for XcmConfig {
-    type RuntimeCall = RuntimeCall;
-    type XcmSender = XcmRouter;
-    type AssetTransactor = (); // configured with AssetHub reserve transfer
-    type OriginConverter = XcmOriginToTransactDispatchOrigin;
-    type IsReserve = Everything;
-    type IsTeleporter = Nothing;
-    type UniversalLocation = UniversalLocation;
-    type Barrier = Barrier;
-    type Weigher = FixedWeightBounds<UnitWeightCost, RuntimeCall, MaxInstructions>;
-    type Trader = (); // PST as fee token — configured in full runtime
-    type ResponseHandler = PolkadotXcm;
-    type AssetTrap = PolkadotXcm;
-    type AssetLocker = ();
-    type AssetExchanger = ();
-    type AssetClaims = PolkadotXcm;
-    type SubscriptionService = PolkadotXcm;
-    type PalletInstancesInfo = AllPalletsWithSystem;
-    type MaxAssetsIntoHolding = ConstU32<8>;
-    type FeeManager = ();
-    type MessageExporter = ();
-    type UniversalAliases = Nothing;
-    type CallDispatcher = RuntimeCall;
-    type SafeCallFilter = Everything;
-    type Aliasers = Nothing;
+#[derive_impl(pallet_balances::config_preludes::TestDefaultConfig)]
+impl pallet_balances::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Balance = Balance;
+    type ExistentialDeposit = ExistentialDeposit;
+    type AccountStore = System;
 }
 
-parameter_types! {
-    pub const UnitWeightCost: u64 = 1_000_000;
-    pub const MaxInstructions: u32 = 100;
-    pub UniversalLocation: xcm::latest::InteriorLocation =
-        xcm::latest::Junctions::X2([
-            xcm::latest::Junction::GlobalConsensus(xcm::latest::NetworkId::Polkadot),
-            xcm::latest::Junction::Parachain(3000),
-        ].into());
+#[derive_impl(pallet_assets::config_preludes::TestDefaultConfig)]
+impl pallet_assets::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Balance = Balance;
+    type Currency = Balances;
+    type CreateOrigin = AsEnsureOriginWithArg<frame_system::EnsureSigned<AccountId>>;
+    type ForceOrigin = frame_system::EnsureRoot<AccountId>;
+    type AssetDeposit = AssetDeposit;
+    type AssetAccountDeposit = AssetAccountDeposit;
+    type MetadataDepositBase = MetadataDepositBase;
+    type MetadataDepositPerByte = MetadataDepositPerByte;
+    type ApprovalDeposit = ApprovalDeposit;
+    type Freezer = ();
+    type CallbackHandle = ();
 }
 
-// Type aliases for XCM origin conversion
-pub type XcmOriginToTransactDispatchOrigin = (
-    SovereignSignedViaLocation<LocationToAccountId, RuntimeOrigin>,
-    RelayChainAsNative<RelayChainOrigin, RuntimeOrigin>,
-    SiblingParachainAsNative<cumulus_pallet_xcm::Origin, RuntimeOrigin>,
-    SignedAccountId32AsNative<RelayNetwork, RuntimeOrigin>,
-);
-
-parameter_types! {
-    pub RelayNetwork: Option<xcm::latest::NetworkId> = Some(xcm::latest::NetworkId::Polkadot);
-    pub RelayChainOrigin: RuntimeOrigin = cumulus_pallet_xcm::Origin::Relay.into();
+impl pallet_kyc::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Currency = Balances;
+    type KycAuthority = frame_system::EnsureRoot<AccountId>;
+    type RevocationAuthority = frame_system::EnsureRoot<AccountId>;
+    type BasicKycLimitUsdCents = BasicKycLimitUsdCents;
+    type FullKycLimitUsdCents = FullKycLimitUsdCents;
+    type BlocksPerYear = BlocksPerYear;
 }
 
-pub type LocationToAccountId = (
-    ParentIsPreset<AccountId>,
-    SiblingParachainConvertsVia<polkadot_parachain_primitives::primitives::Sibling, AccountId>,
-    AccountId32Aliases<RelayNetwork, AccountId>,
-);
+impl pallet_rate_lock::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type AuthorityId = pallet_rate_lock::pallet::crypto::OracleId;
+    type UpdateInterval = RateUpdateInterval;
+    type CircuitBreakerBps = CircuitBreakerBps;
+}
 
-pub type Barrier = AllowTopLevelPaidExecutionFrom<Everything>;
-pub type XcmRouter = cumulus_primitives_utility::ParentAsUmp<ParachainSystem, PolkadotXcm, ()>;
+impl pallet_fiat_bridge::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type GovernanceOrigin = frame_system::EnsureRoot<AccountId>;
+}
+
+pub struct RuntimeFxOracle;
+
+impl pallet_remittance::FxRateProvider for RuntimeFxOracle {
+    fn get_usdinr_rate() -> Option<u64> {
+        pallet_rate_lock::CurrentRate::<Runtime>::get().map(|entry| entry.rate)
+    }
+}
+
+impl pallet_remittance::Config for Runtime {
+    type RuntimeEvent = RuntimeEvent;
+    type Assets = Assets;
+    type TreasuryAccount = TreasuryAccount;
+    type ProtocolFeeBps = ProtocolFeeBps;
+    type MinSendAmount = MinSendAmount;
+    type RateLockBlocks = RateLockBlocks;
+    type FxOracle = RuntimeFxOracle;
+}
+
+impl<LocalCall> frame_system::offchain::CreateSignedTransaction<LocalCall> for Runtime
+where
+    RuntimeCall: From<LocalCall>,
+{
+    fn create_transaction<C: frame_system::offchain::AppCrypto<Self::Public, Self::Signature>>(
+        call: RuntimeCall,
+        public: <Signature as Verify>::Signer,
+        _account: AccountId,
+        nonce: Nonce,
+    ) -> Option<(RuntimeCall, <UncheckedExtrinsic as sp_runtime::traits::Extrinsic>::SignaturePayload)>
+    {
+        let period = BlockHashCount::get().checked_next_power_of_two()?.saturating_div(2) as u64;
+        let current_block = System::block_number().saturating_sub(1) as u64;
+        let extra = (
+            frame_system::CheckNonZeroSender::<Runtime>::new(),
+            frame_system::CheckSpecVersion::<Runtime>::new(),
+            frame_system::CheckTxVersion::<Runtime>::new(),
+            frame_system::CheckGenesis::<Runtime>::new(),
+            frame_system::CheckEra::<Runtime>::from(sp_runtime::generic::Era::mortal(
+                period,
+                current_block,
+            )),
+            frame_system::CheckNonce::<Runtime>::from(nonce),
+            frame_system::CheckWeight::<Runtime>::new(),
+        );
+        let raw_payload = SignedPayload::new(call, extra).ok()?;
+        let signature = raw_payload.using_encoded(|payload| C::sign(payload, public.clone()))?;
+        let (call, extra, _) = raw_payload.deconstruct();
+        Some((call, (Address::Id(public.into_account()), signature, extra)))
+    }
+}
+
+impl frame_system::offchain::SigningTypes for Runtime {
+    type Public = <Signature as Verify>::Signer;
+    type Signature = Signature;
+}
+
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
+    RuntimeCall: From<C>,
+{
+    type Extrinsic = UncheckedExtrinsic;
+    type OverarchingCall = RuntimeCall;
+}
