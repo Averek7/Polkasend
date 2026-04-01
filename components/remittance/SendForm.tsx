@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { decodeAddress } from '@polkadot/util-crypto';
 import { useRemittanceStore } from '../../lib/polkadot/remittanceStore';
 import { useWalletStore } from '../../lib/polkadot/walletStore';
 import { ArrowDown, Zap, Building2, Link2, Fingerprint } from 'lucide-react';
@@ -23,6 +24,16 @@ export function SendForm() {
   } = useRemittanceStore();
   const { address, connect } = useWalletStore();
   const [currIdx, setCurrIdx] = useState(0);
+
+  const hasChainRecipient = (() => {
+    try {
+      decodeAddress(recipientId);
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  const usesDirectChainSubmission = deliveryMode === 'iinr' && hasChainRecipient;
 
   const handleCurrencyClick = () => {
     const next = (currIdx + 1) % CURRENCIES.length;
@@ -145,6 +156,30 @@ export function SendForm() {
         })}
       </div>
 
+      <div
+        className="mb-6 rounded-xl px-4 py-3 text-sm"
+        style={{
+          background: usesDirectChainSubmission
+            ? 'rgba(0,232,135,0.06)'
+            : 'rgba(108,159,255,0.06)',
+          border: usesDirectChainSubmission
+            ? '1px solid rgba(0,232,135,0.16)'
+            : '1px solid rgba(108,159,255,0.16)',
+          color: '#cfd3e6',
+        }}
+      >
+        <div className="font-semibold mb-1" style={{ color: usesDirectChainSubmission ? '#00e887' : '#8db4ff' }}>
+          {usesDirectChainSubmission ? 'Direct chain submission' : 'Backend-assisted settlement'}
+        </div>
+        <div style={{ color: '#8b8ba7' }}>
+          {usesDirectChainSubmission
+            ? 'This transfer will be signed from your connected Substrate wallet and submitted directly to the remittance pallet.'
+            : deliveryMode === 'iinr'
+            ? 'Use a valid Substrate recipient address to send this mode directly on-chain. Otherwise the app falls back to the backend flow.'
+            : 'This delivery mode still routes through the backend settlement path while on-chain coverage is being expanded.'}
+        </div>
+      </div>
+
       {/* Send button */}
       <motion.button
         whileHover={canSend ? { scale: 1.02 } : {}}
@@ -170,7 +205,9 @@ export function SendForm() {
           ? '🔗  Connect Wallet to Send'
           : !recipientId
           ? 'Enter recipient to continue'
-          : '🚀  Send via PolkaSend Parachain'}
+          : usesDirectChainSubmission
+          ? '🚀  Submit On-Chain via PolkaSend'
+          : '🚀  Continue with PolkaSend'}
       </motion.button>
     </motion.div>
   );

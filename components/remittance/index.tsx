@@ -232,7 +232,7 @@ const TX_STEPS = [
 ];
 
 export function TransactionModal() {
-  const { orderStatus, utrNumber, txHash, sendAmount, receiveAmountInr, reset } = useRemittanceStore();
+  const { orderStatus, utrNumber, txHash, sendAmount, receiveAmountInr, integrationMode, reset } = useRemittanceStore();
   const [step, setStep]       = useState(0);
   const [progress, setProgress] = useState(0);
 
@@ -282,7 +282,9 @@ export function TransactionModal() {
         <p className="text-sm mb-6" style={{ color: '#7070a0' }}>
           {done
             ? 'INR delivered to recipient via UPI.'
-            : 'Broadcasting to PolkaSend parachain via XCM…'}
+            : integrationMode === 'contracts'
+            ? 'Submitting directly to the PolkaSend runtime from your connected wallet…'
+            : 'Routing through the backend-assisted settlement path…'}
         </p>
 
         {/* Progress bar */}

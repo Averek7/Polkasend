@@ -1,5 +1,7 @@
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import type { SubmittableExtrinsic } from '@polkadot/api/types';
+import type { Signer } from '@polkadot/types/types';
+import { getActiveInjectedSigner } from './signer';
 
 const RPC_ENDPOINTS = {
   polkadotRelay:    'wss://rpc.polkadot.io',
@@ -104,6 +106,52 @@ export function buildSubmitKyc(
   panHash: string | null,
 ): SubmittableExtrinsic<'promise'> {
   return api.tx['kyc']['submitKyc'](level, countryCode, aadhaarHash, panHash);
+}
+
+export interface SubmittedExtrinsicReceipt {
+  txHash: string;
+  status: string;
+  blockHash?: string;
+}
+
+export async function submitWithInjectedSigner(
+  extrinsic: SubmittableExtrinsic<'promise'>,
+  address: string,
+  signer: Signer | null = getActiveInjectedSigner(),
+): Promise<SubmittedExtrinsicReceipt> {
+  if (!signer) {
+    throw new Error('No active injected signer is available for this wallet.');
+  }
+
+  return new Promise((resolve, reject) => {
+    let unsub: (() => void) | undefined;
+
+    extrinsic
+      .signAndSend(address, { signer }, (result) => {
+        if (result.dispatchError) {
+          unsub?.();
+          reject(new Error(result.dispatchError.toString()));
+          return;
+        }
+
+        if (result.status.isInBlock || result.status.isFinalized) {
+          const blockHash = result.status.isInBlock
+            ? result.status.asInBlock.toHex()
+            : result.status.asFinalized.toHex();
+
+          unsub?.();
+          resolve({
+            txHash: extrinsic.hash.toHex(),
+            status: result.status.type,
+            blockHash,
+          });
+        }
+      })
+      .then((unsubscribe) => {
+        unsub = unsubscribe;
+      })
+      .catch(reject);
+  });
 }
 
 // ─── XCM helpers ─────────────────────────────────────────────────────────────
