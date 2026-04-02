@@ -9,6 +9,7 @@
 /backend/dist
 /backend/.data
 /backend/logs
+/backend/.env
 /backend/tests/*.js
 /contracts/target
 
